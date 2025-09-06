@@ -7,6 +7,9 @@ interface TransactionListProps {
   categories: Category[];
   bankAccounts: BankAccount[];
   onDeleteTransaction: (id: string) => void;
+  onUpdateTransaction: (id: string, newDescription: string, newAmount: number) => string | void;
+  editingTransactionId: string | null;
+  onSetEditingTransactionId: (id: string | null) => void;
   currency: string;
 }
 
@@ -31,7 +34,12 @@ const formatDateHeader = (dateString: string): string => {
 };
 
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, categories, bankAccounts, onDeleteTransaction, currency }) => {
+const TransactionList: React.FC<TransactionListProps> = ({
+  transactions, categories, bankAccounts,
+  onDeleteTransaction, onUpdateTransaction,
+  editingTransactionId, onSetEditingTransactionId,
+  currency 
+}) => {
   const groupedTransactions = useMemo(() => {
     // New transactions are added to the start of the array, so the relative order is newest first.
     // We sort primarily by date, but since sort is stable in modern engines, the relative order for same-day items is preserved.
@@ -72,7 +80,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, categor
                 transaction={transaction} 
                 category={transaction.categoryId ? categories.find(c => c.id === transaction.categoryId) : undefined}
                 bankAccounts={bankAccounts}
-                onDelete={onDeleteTransaction} 
+                onDelete={onDeleteTransaction}
+                onUpdate={onUpdateTransaction}
+                isEditing={editingTransactionId === transaction.id}
+                onSetEditing={onSetEditingTransactionId}
                 currency={currency}
               />
             ))}

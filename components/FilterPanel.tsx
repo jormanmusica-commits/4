@@ -61,6 +61,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
     { value: 'income', label: 'Ingresos' },
     { value: 'expense', label: 'Gastos' },
     { value: 'transfer', label: 'Transferencias' },
+    { value: 'saving', label: 'Ahorros' },
+    { value: 'loan', label: 'Préstamos' },
   ];
 
   const methodOptions: { value: PaymentMethodFilter, label: string }[] = [

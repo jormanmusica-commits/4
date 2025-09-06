@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Profile, Filters } from '../types';
+import { Profile, Filters, TransactionTypeFilter } from '../types';
 import Summary from '../components/Summary';
 import TransactionList from '../components/IncomeList';
 import MonthlySummary from '../components/MonthlySummary';
@@ -13,6 +13,7 @@ interface ResumenProps {
   balance: number;
   balancesByMethod: Record<string, number>;
   onDeleteTransaction: (id: string) => void;
+  onUpdateTransaction: (id: string, newDescription: string, newAmount: number) => string | void;
   onInitiateDeposit: () => void;
   onInitiateWithdrawal: () => void;
   monthlyIncome: number;
@@ -28,7 +29,7 @@ interface ResumenProps {
 const CASH_METHOD_ID = 'efectivo';
 
 const Resumen: React.FC<ResumenProps> = ({ 
-  profile, balance, balancesByMethod, onDeleteTransaction,
+  profile, balance, balancesByMethod, onDeleteTransaction, onUpdateTransaction,
   onInitiateDeposit, onInitiateWithdrawal,
   monthlyIncome, monthlyExpenses,
   monthlyIncomeByBank, monthlyIncomeByCash,
@@ -39,6 +40,11 @@ const Resumen: React.FC<ResumenProps> = ({
   const [modalType, setModalType] = useState<'income' | 'expense' | null>(null);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Filters | null>(null);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+
+  const ahorroCategoryId = useMemo(() => {
+    return categories.find(c => c.name.toLowerCase() === 'ahorro')?.id;
+  }, [categories]);
   
   const handleApplyFilters = (newFilters: Filters) => {
     const { startDate, endDate, types, methods, bankAccounts } = newFilters;
@@ -68,8 +74,19 @@ const Resumen: React.FC<ResumenProps> = ({
         if (end && transactionDate > end) return false;
 
         if (hasTypeFilter) {
-            const transactionType = t.transferId ? 'transfer' : t.type;
-            if (!types.includes(transactionType)) return false;
+            let transactionTypeForFilter: TransactionTypeFilter;
+
+            if (t.transferId) {
+                transactionTypeForFilter = 'transfer';
+            } else if (t.type === 'expense' && t.categoryId === ahorroCategoryId) {
+                transactionTypeForFilter = 'saving';
+            } else if (t.type === 'expense' && t.patrimonioType === 'loan') {
+                transactionTypeForFilter = 'loan';
+            } else {
+                transactionTypeForFilter = t.type;
+            }
+            
+            if (!types.includes(transactionTypeForFilter)) return false;
         }
         
         if (hasMethodFilter || hasBankFilter) {
@@ -85,7 +102,7 @@ const Resumen: React.FC<ResumenProps> = ({
 
         return true;
     });
-}, [transactions, activeFilters]);
+}, [transactions, activeFilters, ahorroCategoryId]);
 
   return (
     <div className="animate-fade-in">
@@ -137,6 +154,9 @@ const Resumen: React.FC<ResumenProps> = ({
           categories={categories}
           bankAccounts={bankAccounts}
           onDeleteTransaction={onDeleteTransaction}
+          onUpdateTransaction={onUpdateTransaction}
+          editingTransactionId={editingTransactionId}
+          onSetEditingTransactionId={setEditingTransactionId}
           currency={currency}
         />
       </div>

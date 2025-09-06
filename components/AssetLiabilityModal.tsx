@@ -1,74 +1,126 @@
 import React, { useState, useEffect } from 'react';
-import { Asset, Liability } from '../types';
+import { BankAccount } from '../types';
 import CloseIcon from './icons/CloseIcon';
 import AmountInput from './AmountInput';
+import CustomDatePicker from './CustomDatePicker';
+
+const CASH_METHOD_ID = 'efectivo';
 
 interface AssetLiabilityModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSaveAsset: (name: string, value: number, id?: string) => void;
-    onSaveLiability: (name: string, amount: number, id?: string) => void;
+    onSaveLiability: (name: string, amount: number, date: string) => void;
+    onSaveLoan: (name: string, amount: number, sourceMethodId: string, date: string) => void;
+    onCreateSaving: (value: number, sourceMethodId: string, date: string) => void;
     config: {
-        type: 'asset' | 'liability';
-        item?: Asset | Liability;
+        type: 'asset' | 'liability' | 'loan';
     };
     currency: string;
+    bankAccounts: BankAccount[];
+    balancesByMethod: Record<string, number>;
 }
 
 const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
-    isOpen, onClose, onSaveAsset, onSaveLiability, config, currency
+    isOpen, onClose, onSaveLiability, onSaveLoan, onCreateSaving, config, currency, bankAccounts = [], balancesByMethod = {}
 }) => {
-    const { type, item } = config;
+    const { type } = config;
     const [name, setName] = useState('');
     const [amount, setAmount] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [sourceMethodId, setSourceMethodId] = useState<string>(CASH_METHOD_ID);
     const [error, setError] = useState('');
 
     const isAsset = type === 'asset';
-    const isEditing = !!item;
+    const isLoan = type === 'loan';
 
     useEffect(() => {
-        if (isOpen && item) {
-            setName(item.name);
-            setAmount(isAsset ? (item as Asset).value.toString() : (item as Liability).amount.toString());
-        } else if (isOpen) {
+        if (isOpen) {
             setName('');
             setAmount('');
+            setDate(new Date().toISOString().split('T')[0]);
+            if (isAsset || isLoan) {
+                const cashBalance = balancesByMethod[CASH_METHOD_ID] || 0;
+                if (cashBalance > 0) {
+                    setSourceMethodId(CASH_METHOD_ID);
+                } else {
+                    setSourceMethodId(bankAccounts.find(b => (balancesByMethod[b.id] || 0) > 0)?.id || CASH_METHOD_ID);
+                }
+            }
+            setError('');
         }
-        setError('');
-    }, [isOpen, item, isAsset]);
+    }, [isOpen, isAsset, isLoan, balancesByMethod, bankAccounts]);
+
 
     if (!isOpen) return null;
 
     const handleSubmit = () => {
         const numericAmount = parseFloat(amount.replace(',', '.'));
-        if (!name.trim() || !amount.trim()) {
-            setError('Ambos campos son obligatorios.');
+        
+        if (!isAsset && !name.trim()) {
+            setError('La descripción es obligatoria.');
             return;
         }
-        if (isNaN(numericAmount) || numericAmount < 0) {
+        if (!amount.trim()) {
+            setError('El monto es obligatorio.');
+            return;
+        }
+        if (!date) {
+            setError('La fecha es obligatoria.');
+            return;
+        }
+        if (isNaN(numericAmount) || numericAmount <= 0) {
             setError('Por favor, introduce una cantidad válida.');
             return;
         }
+        
+        if (isAsset || isLoan) {
+            if (!sourceMethodId) {
+                setError('Debes seleccionar un origen para los fondos.');
+                return;
+            }
+        }
 
         if (isAsset) {
-            onSaveAsset(name, numericAmount, item?.id);
+            onCreateSaving(numericAmount, sourceMethodId, date);
+        } else if (isLoan) {
+            onSaveLoan(name, numericAmount, sourceMethodId, date);
         } else {
-            onSaveLiability(name, numericAmount, item?.id);
+            onSaveLiability(name, numericAmount, date);
         }
     };
 
     const modalConfig = isAsset
         ? {
-            title: isEditing ? 'Editar Activo' : 'Añadir Activo',
+            title: 'Añadir Ahorro',
             amountLabel: 'Valor',
-            buttonText: 'Guardar Activo',
+            buttonText: 'Guardar Ahorro',
             themeColor: '#22c55e' // Green
+        } : isLoan ? {
+            title: 'Añadir Préstamo',
+            amountLabel: 'Monto',
+            buttonText: 'Guardar Préstamo',
+            themeColor: '#3b82f6' // Blue
         } : {
-            title: isEditing ? 'Editar Pasivo' : 'Añadir Pasivo',
-            amountLabel: 'Cantidad',
-            buttonText: 'Guardar Pasivo',
+            title: 'Añadir Deuda',
+            amountLabel: 'Monto',
+            buttonText: 'Guardar Deuda',
             themeColor: '#ef4444' // Red
         };
+
+    const sources = [
+        { id: CASH_METHOD_ID, name: 'Efectivo', balance: balancesByMethod[CASH_METHOD_ID] || 0 },
+        ...bankAccounts.map(b => ({ id: b.id, name: b.name, balance: balancesByMethod[b.id] || 0 }))
+    ];
+
+    const formatCurrency = (amountValue: number) => {
+        const locale = currency === 'COP' ? 'es-CO' : (currency === 'CLP' ? 'es-CL' : 'es-ES');
+        return new Intl.NumberFormat(locale, {
+            style: 'currency',
+            currency: currency,
+            minimumFractionDigits: amountValue % 1 === 0 ? 0 : 2,
+            maximumFractionDigits: 2,
+        }).format(amountValue);
+    };
 
     return (
         <div
@@ -90,27 +142,146 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                 </header>
 
                 <div className="p-6 space-y-4">
-                    <div>
-                        <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Nombre
-                        </label>
-                        <input
-                            type="text"
-                            id="item-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder={isAsset ? "Ej: Acciones de Apple" : "Ej: Préstamo Coche"}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
-                        />
-                    </div>
-                    <AmountInput
-                        value={amount}
-                        onChange={setAmount}
-                        label={modalConfig.amountLabel}
-                        themeColor={modalConfig.themeColor}
-                        currency={currency}
-                        autoFocus={true}
-                    />
+                    {/* ASSET (SAVING) FORM - Order: Amount, Date, Source */}
+                    {isAsset && (
+                        <>
+                            <AmountInput
+                                value={amount}
+                                onChange={setAmount}
+                                label="Monto a Ahorrar"
+                                themeColor={modalConfig.themeColor}
+                                currency={currency}
+                                autoFocus={true}
+                            />
+                            <div>
+                                <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Fecha
+                                </label>
+                                <CustomDatePicker
+                                    value={date}
+                                    onChange={setDate}
+                                    themeColor={modalConfig.themeColor}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="source-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Origen de los fondos
+                                </label>
+                                <select
+                                    id="source-method"
+                                    value={sourceMethodId}
+                                    onChange={(e) => setSourceMethodId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                >
+                                    {sources.map(source => {
+                                        const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
+                                        const disabled = source.balance < numericAmount;
+                                        return (
+                                            <option key={source.id} value={source.id} disabled={disabled}>
+                                                {source.name} ({formatCurrency(source.balance)}) {disabled ? " - Fondos insuficientes" : ""}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                        </>
+                    )}
+
+                    {/* LOAN FORM - Requested Order: Amount, Description, Source, Date */}
+                    {isLoan && (
+                        <>
+                            <AmountInput
+                                value={amount}
+                                onChange={setAmount}
+                                label={modalConfig.amountLabel}
+                                themeColor={modalConfig.themeColor}
+                                currency={currency}
+                                autoFocus={true}
+                            />
+                            <div>
+                                <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Descripcion del prestamo
+                                </label>
+                                <input
+                                    type="text"
+                                    id="item-name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Ej: Préstamo a Juan"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="source-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Origen de los fondos
+                                </label>
+                                <select
+                                    id="source-method"
+                                    value={sourceMethodId}
+                                    onChange={(e) => setSourceMethodId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                >
+                                    {sources.map(source => {
+                                        const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
+                                        const disabled = source.balance < numericAmount;
+                                        return (
+                                            <option key={source.id} value={source.id} disabled={disabled}>
+                                                {source.name} ({formatCurrency(source.balance)}) {disabled ? " - Fondos insuficientes" : ""}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                             <div>
+                                <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Fecha
+                                </label>
+                                <CustomDatePicker
+                                    value={date}
+                                    onChange={setDate}
+                                    themeColor={modalConfig.themeColor}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* LIABILITY (DEBT) FORM - Order: Amount, Description, Date */}
+                    {type === 'liability' && (
+                        <>
+                            <AmountInput
+                                value={amount}
+                                onChange={setAmount}
+                                label={modalConfig.amountLabel}
+                                themeColor={modalConfig.themeColor}
+                                currency={currency}
+                                autoFocus={true}
+                            />
+                            <div>
+                                <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Descripción
+                                </label>
+                                <input
+                                    type="text"
+                                    id="item-name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="Ej: Préstamo Coche"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Fecha
+                                </label>
+                                <CustomDatePicker
+                                    value={date}
+                                    onChange={setDate}
+                                    themeColor={modalConfig.themeColor}
+                                />
+                            </div>
+                        </>
+                    )}
+                    
                     {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                 </div>
 

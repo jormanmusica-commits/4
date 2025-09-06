@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability } from './types';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability, Loan } from './types';
 import Inicio from './pages/Inicio';
 import Resumen from './pages/Resumen';
 import Ajustes from './pages/Ajustes';
@@ -13,6 +13,10 @@ import ProfileCreationModal from './components/ProfileCreationModal';
 import { exportProfileToCsv } from './utils/exportUtils';
 import FixedExpenseModal from './components/FixedExpenseModal';
 import AssetLiabilityModal from './components/AssetLiabilityModal';
+import PlusIcon from './components/icons/PlusIcon';
+import ArrowUpIcon from './components/icons/ArrowUpIcon';
+import ArrowDownIcon from './components/icons/ArrowDownIcon';
+import ScaleIcon from './components/icons/ScaleIcon';
 
 
 const CASH_METHOD_ID = 'efectivo';
@@ -25,6 +29,7 @@ const defaultCategories: Category[] = [
   { id: '5', name: 'Entretenimiento', icon: 'Entertainment', color: '#8b5cf6' },
   { id: '6', name: 'Salud', icon: 'Health', color: '#ef4444' },
   { id: '8', name: 'Ahorro', icon: 'Tag', color: '#14b8a6' },
+  { id: '9', name: 'Préstamos', icon: 'Scale', color: '#3b82f6' },
   { id: '7', name: 'General', icon: 'ArrowDown', color: '#ef4444' },
 ];
 
@@ -39,7 +44,172 @@ const createDefaultProfileData = (): ProfileData => ({
     fixedExpenses: [],
     assets: [],
     liabilities: [],
+    loans: [],
 });
+
+
+// =======================================================
+// START: FloatingActionButton Component Definition
+// =======================================================
+export interface MenuItem {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  color: string;
+  disabled?: boolean;
+}
+
+interface FloatingActionButtonProps {
+  menuItems: MenuItem[];
+  buttonClass: string;
+  ringColorClass: string;
+  position: { x: number, y: number };
+  onPositionChange: (position: { x: number, y: number }) => void;
+}
+
+const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({ menuItems, buttonClass, ringColorClass, position, onPositionChange }) => {
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const dragInfo = useRef({ isDragging: false, offsetX: 0, offsetY: 0, moved: false });
+
+  const handleClick = () => {
+    // Si `moved` es true, significa que se acaba de completar un arrastre. No queremos alternar el menú.
+    if (!dragInfo.current.moved) {
+      setIsAddMenuOpen(prev => !prev);
+    }
+    // Después de cualquier clic o liberación de arrastre, reiniciamos el estado `moved` para la siguiente interacción.
+    dragInfo.current.moved = false;
+  };
+
+  const handleMenuClick = (item: MenuItem) => {
+    if(item.disabled) return;
+    item.onClick();
+    setIsAddMenuOpen(false);
+  };
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!dragInfo.current.isDragging) return;
+    if (e.type === 'touchmove') {
+      e.preventDefault(); // Evita el desplazamiento de la página mientras se arrastra
+    }
+    dragInfo.current.moved = true; // Se ha producido un arrastre.
+    
+    const event = 'touches' in e ? e.touches[0] : e;
+    const fabSize = 80;
+    const margin = 8;
+    const bottomNavHeight = 80;
+
+    let newX = event.clientX - dragInfo.current.offsetX;
+    let newY = event.clientY - dragInfo.current.offsetY;
+
+    // Limitar al área visible
+    newX = Math.max(margin, Math.min(newX, window.innerWidth - fabSize - margin));
+    newY = Math.max(margin, Math.min(newY, window.innerHeight - fabSize - margin - bottomNavHeight));
+
+    onPositionChange({ x: newX, y: newY });
+  }, [onPositionChange]);
+
+  const handleDragEnd = useCallback(() => {
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    document.removeEventListener('touchmove', handleDragMove);
+    document.removeEventListener('touchend', handleDragEnd);
+
+    if (fabRef.current) {
+      fabRef.current.classList.remove('dragging');
+    }
+    
+    dragInfo.current.isDragging = false;
+    // La lógica de ajuste a los bordes y de alternar el menú se ha eliminado de aquí.
+  }, [handleDragMove]);
+
+  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    const event = 'touches' in e ? e.touches[0] : e;
+    if (fabRef.current) {
+        const rect = fabRef.current.getBoundingClientRect();
+        // Reiniciar `moved` al comienzo de cada interacción.
+        dragInfo.current = {
+            isDragging: true,
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top,
+            moved: false,
+        };
+        fabRef.current.classList.add('dragging');
+
+        document.addEventListener('mousemove', handleDragMove);
+        document.addEventListener('mouseup', handleDragEnd);
+        document.addEventListener('touchmove', handleDragMove, { passive: false });
+        document.addEventListener('touchend', handleDragEnd);
+    }
+  }, [handleDragMove, handleDragEnd]);
+  
+  const isFabOnLeft = position.x < window.innerWidth / 2;
+  const menuStyle: React.CSSProperties = {
+    bottom: window.innerHeight - position.y + 16,
+    transformOrigin: isFabOnLeft ? 'bottom left' : 'bottom right',
+  };
+  if (isFabOnLeft) {
+    menuStyle.left = position.x;
+  } else {
+    menuStyle.left = position.x + 80 - 256;
+  }
+  
+  return (
+    <>
+      {isAddMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-fade-in"
+          onClick={() => setIsAddMenuOpen(false)}
+          aria-hidden="true"
+        ></div>
+      )}
+      {isAddMenuOpen && (
+           <div 
+              className="fixed flex flex-col items-center gap-4 w-64 animate-scale-in-up z-50"
+              style={menuStyle}
+           >
+            {menuItems.map((item, index) => (
+              <button
+                key={index}
+                onClick={() => handleMenuClick(item)}
+                disabled={item.disabled}
+                className="w-full flex items-center justify-center gap-3 text-white font-bold py-3 px-6 rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-white dark:focus:ring-offset-gray-900 transition-all duration-300 ease-out transform disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:-translate-y-1 enabled:active:scale-95 enabled:hover:brightness-110"
+                style={{ backgroundColor: item.color }}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      <button
+        ref={fabRef}
+        onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
+        onClick={handleClick}
+        aria-label={isAddMenuOpen ? "Cerrar menú" : "Abrir menú de acciones"}
+        className={`fixed z-50 w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 ${
+          isAddMenuOpen ? 'bg-gray-500 dark:bg-gray-400 dark:text-gray-800 rotate-45' : `${buttonClass} ${ringColorClass} hover:scale-105`
+        }`}
+        style={{
+          left: 0,
+          top: 0,
+          transform: `translate(${position.x}px, ${position.y}px)`,
+          touchAction: 'none'
+        }}
+      >
+        <PlusIcon className="w-10 h-10" />
+      </button>
+      <style>{`
+        .dragging { cursor: grabbing; transition: none !important; transform: translate(${position.x}px, ${position.y}px) scale(1.05) !important; }
+      `}</style>
+    </>
+  );
+};
+// =======================================================
+// END: FloatingActionButton Component Definition
+// =======================================================
+
 
 const App: React.FC = () => {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -65,7 +235,7 @@ const App: React.FC = () => {
             currency: 'EUR',
             data: { 
                 transactions, bankAccounts, categories, fixedExpenses, 
-                assets: [], liabilities: [] 
+                assets: [], liabilities: [], loans: []
             }
         };
         return [migratedProfile];
@@ -113,9 +283,44 @@ const App: React.FC = () => {
   const [isProfileCreationModalOpen, setIsProfileCreationModalOpen] = useState(false);
   const [isFixedExpenseModalOpen, setIsFixedExpenseModalOpen] = useState(false);
   const [isAssetLiabilityModalOpen, setIsAssetLiabilityModalOpen] = useState(false);
-  const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability', item?: Asset | Liability } | null>(null);
+  const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability' | 'loan' } | null>(null);
 
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
+
+    const getDefaultFabPosition = useCallback(() => ({
+    x: window.innerWidth - 88, // 80px width + 8px margin
+    y: window.innerHeight - 176, // 80px height + 80px bottom nav + 16px margin
+  }), []);
+
+  const [fabPosition, setFabPosition] = useState(() => {
+    try {
+      const savedPosition = localStorage.getItem('fabPosition');
+      if (savedPosition) return JSON.parse(savedPosition);
+    } catch (e) { console.error("Failed to parse FAB position", e); }
+    return getDefaultFabPosition();
+  });
+
+  useEffect(() => {
+    localStorage.setItem('fabPosition', JSON.stringify(fabPosition));
+  }, [fabPosition]);
+
+  useEffect(() => {
+    const handleResize = () => {
+        setFabPosition(currentPos => {
+            const fabSize = 80;
+            const margin = 8;
+            const bottomNavHeight = 80;
+            
+            // Simplemente mantener dentro de los límites, sin ajustar a los bordes.
+            const newX = Math.max(margin, Math.min(currentPos.x, window.innerWidth - fabSize - margin));
+            const newY = Math.max(margin, Math.min(currentPos.y, window.innerHeight - fabSize - margin - bottomNavHeight));
+
+            return { x: newX, y: newY };
+        });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (theme === Theme.DARK) {
@@ -149,7 +354,7 @@ const App: React.FC = () => {
   const updateActiveProfileData = (updater: (data: ProfileData) => ProfileData) => {
     if (!activeProfileId) return;
     setProfiles(prevProfiles => prevProfiles.map(p => 
-        p.id === activeProfileId ? { ...p, data: { ...p.data, ...updater(p.data) } } : p
+        p.id === activeProfileId ? { ...p, data: updater(p.data) } : p
     ));
   };
 
@@ -225,13 +430,62 @@ const App: React.FC = () => {
     setCurrentPage('resumen');
 }, [activeProfile]);
 
+  const handleUpdateTransaction = useCallback((id: string, newDescription: string, newAmount: number): string | void => {
+    if (!activeProfile) return "No se encontró un perfil activo.";
+
+    const transactionToUpdate = activeProfile.data.transactions.find(t => t.id === id);
+    if (!transactionToUpdate) return "No se encontró la transacción.";
+    
+    if (transactionToUpdate.transferId || transactionToUpdate.patrimonioId) {
+        return "Las transferencias y los movimientos de patrimonio no se pueden editar directamente.";
+    }
+
+    const updatedTransactions = activeProfile.data.transactions.map(t =>
+        t.id === id ? { ...t, description: newDescription, amount: newAmount } : t
+    );
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+    if (validationError) {
+        return validationError;
+    }
+    
+    updateActiveProfileData(data => ({
+        ...data,
+        transactions: updatedTransactions
+    }));
+  }, [activeProfile]);
+
   const handleDeleteTransaction = useCallback((id: string) => {
     if (!activeProfile) return;
 
     const transactionToDelete = activeProfile.data.transactions.find(t => t.id === id);
     if (!transactionToDelete) return;
 
+    const isTransfer = !!transactionToDelete.transferId;
+    const isPatrimonio = !!transactionToDelete.patrimonioId;
+    let confirmMessage = `¿Estás seguro de que quieres eliminar esta transacción?`;
+    if (isTransfer) {
+        confirmMessage = `Esta es una transferencia. ¿Estás seguro de que quieres eliminar ambas partes de la transacción?`;
+    } else if (isPatrimonio) {
+        const typeText = transactionToDelete.patrimonioType === 'asset' ? 'el ahorro' : 'el préstamo';
+        confirmMessage = `Esta transacción está vinculada a un movimiento de patrimonio. Eliminarla también eliminará ${typeText} asociado. ¿Estás seguro?`;
+    }
+    
+    if (!window.confirm(confirmMessage)) {
+        return;
+    }
+
     let transactionsToRemoveIds = [id];
+    let updatedAssets = activeProfile.data.assets;
+    let updatedLoans = activeProfile.data.loans;
+
+    if (transactionToDelete.patrimonioId && transactionToDelete.patrimonioType) {
+        if (transactionToDelete.patrimonioType === 'asset') {
+            updatedAssets = (activeProfile.data.assets || []).filter(item => item.id !== transactionToDelete.patrimonioId);
+        } else if (transactionToDelete.patrimonioType === 'loan') {
+            updatedLoans = (activeProfile.data.loans || []).filter(item => item.id !== transactionToDelete.patrimonioId);
+        }
+    }
 
     if (transactionToDelete.transferId) {
         const otherPartOfTransfer = activeProfile.data.transactions.find(t => t.transferId === transactionToDelete.transferId && t.id !== id);
@@ -245,8 +499,13 @@ const App: React.FC = () => {
         alert(validationError + "\nNo se puede eliminar esta transacción.");
         return;
     }
-
-    updateActiveProfileData(data => ({ ...data, transactions: updatedTransactions }));
+    
+    updateActiveProfileData(data => ({
+        ...data,
+        transactions: updatedTransactions,
+        assets: updatedAssets,
+        loans: updatedLoans,
+    }));
   }, [activeProfile]);
 
   const handleAddCategory = useCallback((name: string) => {
@@ -294,46 +553,158 @@ const App: React.FC = () => {
     updateActiveProfileData(data => ({ ...data, fixedExpenses: data.fixedExpenses.filter(expense => expense.id !== id) }));
   }, []);
 
-  const handleSaveAsset = useCallback((name: string, value: number, id?: string) => {
-    if(id) { // Update
-        updateActiveProfileData(data => ({ ...data, assets: data.assets.map(a => a.id === id ? {...a, name, value} : a) }));
-    } else { // Add
-        const newAsset: Asset = { id: crypto.randomUUID(), name, value };
-        updateActiveProfileData(data => ({ ...data, assets: [...(data.assets || []), newAsset] }));
-    }
-    setIsAssetLiabilityModalOpen(false);
-  }, []);
-
-  const handleDeleteAsset = useCallback((id: string) => {
-    updateActiveProfileData(data => ({...data, assets: data.assets.filter(a => a.id !== id)}));
-  }, []);
-
-  const handleSaveLiability = useCallback((name: string, amount: number, id?: string) => {
-    if(id) { // Update
-        updateActiveProfileData(data => ({ ...data, liabilities: data.liabilities.map(l => l.id === id ? {...l, name, amount} : l) }));
-    } else { // Add
-        const newLiability: Liability = { id: crypto.randomUUID(), name, amount };
-        updateActiveProfileData(data => ({ ...data, liabilities: [...(data.liabilities || []), newLiability] }));
-    }
-    setIsAssetLiabilityModalOpen(false);
-  }, []);
-
-  const handleDeleteLiability = useCallback((id: string) => {
-    updateActiveProfileData(data => ({...data, liabilities: data.liabilities.filter(l => l.id !== id)}));
-  }, []);
-
+  // FIX: Moved useMemo for balances before its use in handleCreateSaving
   const { balance, balancesByMethod } = useMemo(() => {
     if (!activeProfile) return { balance: 0, balancesByMethod: {} };
 
     const balances: Record<string, number> = {};
-    for (const t of activeProfile.data.transactions) {
+    activeProfile.data.bankAccounts.forEach(acc => balances[acc.id] = 0);
+    balances[CASH_METHOD_ID] = 0;
+    
+    // Sort transactions chronologically to calculate balances correctly
+    const sortedTransactions = [...activeProfile.data.transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    for (const t of sortedTransactions) {
       const amount = t.type === 'income' ? t.amount : -t.amount;
       balances[t.paymentMethodId] = (balances[t.paymentMethodId] || 0) + amount;
     }
     const totalBalance = Object.values(balances).reduce((sum, b) => sum + b, 0);
     return { balance: totalBalance, balancesByMethod: balances };
   }, [activeProfile]);
-  
+
+  const handleCreateSaving = useCallback((value: number, sourceMethodId: string, date: string) => {
+    if (!activeProfile) return;
+
+    const sourceBalance = balancesByMethod[sourceMethodId] || 0;
+    if (value > sourceBalance) {
+        alert("Fondos insuficientes en la cuenta de origen.");
+        return;
+    }
+
+    const newAsset: Asset = { id: crypto.randomUUID(), name: 'Ahorro', value, date, sourceMethodId };
+    const ahorroCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'ahorro');
+    const newTransaction: Transaction = {
+        id: crypto.randomUUID(),
+        description: `Movimiento a Ahorros`,
+        amount: value,
+        date: date,
+        type: 'expense',
+        paymentMethodId: sourceMethodId,
+        categoryId: ahorroCategory?.id,
+        patrimonioId: newAsset.id,
+        patrimonioType: 'asset',
+    };
+    
+    const updatedTransactions = [newTransaction, ...activeProfile.data.transactions];
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        assets: [...(data.assets || []), newAsset],
+        transactions: updatedTransactions,
+    }));
+
+    setIsAssetLiabilityModalOpen(false);
+  }, [activeProfile, balancesByMethod]);
+
+  const handleSaveLiability = useCallback((name: string, amount: number, date: string) => {
+    const newLiability: Liability = { id: crypto.randomUUID(), name, amount, date };
+    updateActiveProfileData(data => ({ ...data, liabilities: [...(data.liabilities || []), newLiability] }));
+    setIsAssetLiabilityModalOpen(false);
+  }, []);
+
+  const handleSaveLoan = useCallback((name: string, amount: number, sourceMethodId: string, date: string) => {
+    if (!activeProfile) return;
+
+    const sourceBalance = balancesByMethod[sourceMethodId] || 0;
+    if (amount > sourceBalance) {
+        alert("Fondos insuficientes en la cuenta de origen.");
+        return;
+    }
+
+    const newLoan: Loan = { id: crypto.randomUUID(), name, amount, date, sourceMethodId };
+    const prestamoCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'préstamos');
+    
+    const newTransaction: Transaction = {
+        id: crypto.randomUUID(),
+        description: `Préstamo a ${name}`,
+        amount: amount,
+        date: date,
+        type: 'expense',
+        paymentMethodId: sourceMethodId,
+        categoryId: prestamoCategory?.id,
+        patrimonioId: newLoan.id,
+        patrimonioType: 'loan',
+    };
+    
+    const updatedTransactions = [newTransaction, ...activeProfile.data.transactions];
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        loans: [...(data.loans || []), newLoan],
+        transactions: updatedTransactions,
+    }));
+
+    setIsAssetLiabilityModalOpen(false);
+  }, [activeProfile, balancesByMethod]);
+
+  const handleDeleteAsset = useCallback((id: string) => {
+    if (!activeProfile) return;
+
+    const updatedTransactions = activeProfile.data.transactions.filter(
+        t => !(t.patrimonioId === id && t.patrimonioType === 'asset')
+    );
+    const updatedAssets = (activeProfile.data.assets || []).filter(item => item.id !== id);
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+    if (validationError) {
+        alert(validationError + "\nNo se puede eliminar este ahorro.");
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        assets: updatedAssets,
+        transactions: updatedTransactions,
+    }));
+  }, [activeProfile]);
+
+  const handleDeleteLiability = useCallback((id: string) => {
+      updateActiveProfileData(data => ({ ...data, liabilities: (data.liabilities || []).filter(item => item.id !== id) }));
+  }, []);
+
+  const handleDeleteLoan = useCallback((id: string) => {
+    if (!activeProfile) return;
+
+    const updatedTransactions = activeProfile.data.transactions.filter(
+        t => !(t.patrimonioId === id && t.patrimonioType === 'loan')
+    );
+    const updatedLoans = (activeProfile.data.loans || []).filter(item => item.id !== id);
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+    if (validationError) {
+        alert(validationError + "\nNo se puede eliminar este préstamo.");
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        loans: updatedLoans,
+        transactions: updatedTransactions,
+    }));
+  }, [activeProfile]);
+
   const summaryData = useMemo(() => {
     if (!activeProfile) {
         return {
@@ -343,11 +714,13 @@ const App: React.FC = () => {
             totalIncome: 0, totalExpenses: 0
         };
     }
-    const { transactions } = activeProfile.data;
+    const { transactions, categories } = activeProfile.data;
     
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+
+    const ahorroCategoryId = categories.find(c => c.name.toLowerCase() === 'ahorro')?.id;
 
     let monthlyIncome = 0;
     let monthlyExpenses = 0;
@@ -357,8 +730,8 @@ const App: React.FC = () => {
     let totalExpenses = 0;
 
     transactions.forEach(t => {
-        // Exclude transfers from all summary calculations
-        if (t.transferId) return;
+        // Exclude transfers and savings from summary calculations for clarity
+        if (t.transferId || t.categoryId === ahorroCategoryId) return;
 
         // Monthly calculation
         const transactionDate = new Date(t.date);
@@ -402,14 +775,13 @@ const App: React.FC = () => {
     };
   }, [activeProfile]);
 
-  const { totalAssets, totalLiabilities, netWorth } = useMemo(() => {
-    if (!activeProfile) return { totalAssets: 0, totalLiabilities: 0, netWorth: 0 };
-    const otherAssetsValue = activeProfile.data.assets?.reduce((sum, asset) => sum + asset.value, 0) || 0;
-    const totalAssets = balance + otherAssetsValue;
+  const { manualAssetsValue, totalLiabilities, totalLoans } = useMemo(() => {
+    if (!activeProfile) return { manualAssetsValue: 0, totalLiabilities: 0, totalLoans: 0 };
+    const manualAssetsValue = activeProfile.data.assets?.reduce((sum, asset) => sum + asset.value, 0) || 0;
     const totalLiabilities = activeProfile.data.liabilities?.reduce((sum, liability) => sum + liability.amount, 0) || 0;
-    const netWorth = totalAssets - totalLiabilities;
-    return { totalAssets, totalLiabilities, netWorth };
-  }, [activeProfile, balance]);
+    const totalLoans = activeProfile.data.loans?.reduce((sum, loan) => sum + loan.amount, 0) || 0;
+    return { manualAssetsValue, totalLiabilities, totalLoans };
+  }, [activeProfile]);
   
   const handleExportData = useCallback(() => {
     if (!activeProfile) {
@@ -510,6 +882,7 @@ const App: React.FC = () => {
                 ...p.data,
                 assets: p.data.assets || [],
                 liabilities: p.data.liabilities || [],
+                loans: p.data.loans || [],
             }
         }));
 
@@ -578,8 +951,8 @@ const App: React.FC = () => {
     }
   }, [activeProfileId]);
   
-  const openAssetLiabilityModal = (type: 'asset' | 'liability', item?: Asset | Liability) => {
-    setModalConfig({ type, item });
+  const openAssetLiabilityModal = (type: 'asset' | 'liability' | 'loan') => {
+    setModalConfig({ type });
     setIsAssetLiabilityModalOpen(true);
   };
 
@@ -601,6 +974,7 @@ const App: React.FC = () => {
                 balance={balance} 
                 balancesByMethod={balancesByMethod}
                 onDeleteTransaction={handleDeleteTransaction}
+                onUpdateTransaction={handleUpdateTransaction}
                 onInitiateDeposit={() => handleInitiateTransfer('deposit')}
                 onInitiateWithdrawal={() => handleInitiateTransfer('withdrawal')}
                 monthlyIncome={summaryData.monthlyIncome}
@@ -668,19 +1042,74 @@ const App: React.FC = () => {
             {currentPage === 'patrimonio' && (
                 <Patrimonio
                     profile={activeProfile}
-                    balance={balance}
-                    totalAssets={totalAssets}
+                    manualAssetsValue={manualAssetsValue}
                     totalLiabilities={totalLiabilities}
-                    netWorth={netWorth}
-                    onAddAsset={() => openAssetLiabilityModal('asset')}
-                    onEditAsset={(asset) => openAssetLiabilityModal('asset', asset)}
+                    totalLoans={totalLoans}
+                    assets={activeProfile.data.assets || []}
+                    liabilities={activeProfile.data.liabilities || []}
+                    loans={activeProfile.data.loans || []}
+                    bankAccounts={activeProfile.data.bankAccounts || []}
                     onDeleteAsset={handleDeleteAsset}
-                    onAddLiability={() => openAssetLiabilityModal('liability')}
-                    onEditLiability={(liability) => openAssetLiabilityModal('liability', liability)}
                     onDeleteLiability={handleDeleteLiability}
+                    onDeleteLoan={handleDeleteLoan}
                 />
             )}
           </main>
+          
+          {currentPage === 'resumen' && (
+            <FloatingActionButton
+              buttonClass="bg-gradient-to-br from-[#008f39] to-green-400"
+              ringColorClass="focus:ring-[#008f39]/50"
+              position={fabPosition}
+              onPositionChange={setFabPosition}
+              menuItems={[
+                {
+                  label: 'Añadir Ingreso',
+                  icon: <ArrowUpIcon className="w-6 h-6" />,
+                  onClick: () => handleNavigate('ingresos'),
+                  color: '#008f39',
+                },
+                {
+                  label: 'Añadir Gasto',
+                  icon: <ArrowDownIcon className="w-6 h-6" />,
+                  onClick: () => handleNavigate('gastos'),
+                  color: '#ef4444',
+                },
+              ]}
+            />
+          )}
+
+          {currentPage === 'patrimonio' && (
+            <FloatingActionButton
+              buttonClass="bg-gradient-to-br from-blue-500 to-cyan-400"
+              ringColorClass="focus:ring-blue-500/50"
+              position={fabPosition}
+              onPositionChange={setFabPosition}
+              menuItems={[
+                {
+                    label: 'Añadir Ahorro',
+                    icon: <ArrowUpIcon className="w-6 h-6" />,
+                    onClick: () => openAssetLiabilityModal('asset'),
+                    color: '#22c55e',
+                    disabled: balance <= 0
+                },
+                {
+                    label: 'Añadir Préstamo',
+                    icon: <ScaleIcon className="w-6 h-6" />,
+                    onClick: () => openAssetLiabilityModal('loan'),
+                    color: '#3b82f6',
+                    disabled: balance <= 0
+                },
+                {
+                    label: 'Añadir Deuda',
+                    icon: <ArrowDownIcon className="w-6 h-6" />,
+                    onClick: () => openAssetLiabilityModal('liability'),
+                    color: '#ef4444'
+                },
+              ]}
+            />
+          )}
+
           <BottomNav currentPage={currentPage} onNavigate={handleNavigate} />
         </>
       )}
@@ -714,13 +1143,16 @@ const App: React.FC = () => {
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
       />}
-      {modalConfig && <AssetLiabilityModal
+      {modalConfig && activeProfile && <AssetLiabilityModal
         isOpen={isAssetLiabilityModalOpen}
         onClose={() => setIsAssetLiabilityModalOpen(false)}
-        onSaveAsset={handleSaveAsset}
         onSaveLiability={handleSaveLiability}
+        onSaveLoan={handleSaveLoan}
+        onCreateSaving={handleCreateSaving}
         config={modalConfig}
         currency={activeProfile.currency}
+        bankAccounts={activeProfile.data.bankAccounts}
+        balancesByMethod={balancesByMethod}
       />}
     </div>
   );

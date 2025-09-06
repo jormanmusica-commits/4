@@ -8,7 +8,7 @@ interface AmountInputProps {
   themeColor: string;
   placeholder?: string;
   autoFocus?: boolean;
-  label: string;
+  label?: string;
   currency: string;
 }
 
@@ -65,14 +65,15 @@ const AmountInput: React.FC<AmountInputProps> = ({ value, onChange, onSubmitted,
   return (
     <>
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        {label && <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           {label}
-        </label>
+        </label>}
         <button
           ref={buttonRef}
           type="button"
           onClick={() => setIsKeypadOpen(true)}
-          className="w-full flex items-center px-3 py-2 text-left border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#008f39]/50 focus:border-[#008f39] bg-white dark:bg-gray-700 h-[42px]"
+          className={`w-full flex items-center px-3 py-2 text-left border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#008f39]/50 focus:border-[#008f39] bg-white dark:bg-gray-700 h-[42px] ${!label ? 'min-w-[120px]' : ''}`}
+          aria-label={`Current amount ${displayValue}, press to edit`}
         >
           {displayValue ? (
               <span className="text-gray-900 dark:text-gray-100">{displayValue}</span>

@@ -13,6 +13,8 @@ export interface Transaction {
   paymentMethodId: string;
   categoryId?: string;
   transferId?: string;
+  patrimonioId?: string;
+  patrimonioType?: 'asset' | 'loan';
 }
 
 export interface Category {
@@ -33,12 +35,23 @@ export interface Asset {
   id: string;
   name: string;
   value: number;
+  date: string;
+  sourceMethodId?: string;
 }
 
 export interface Liability {
   id: string;
   name: string;
   amount: number;
+  date: string;
+}
+
+export interface Loan {
+  id: string;
+  name: string;
+  amount: number;
+  date: string;
+  sourceMethodId?: string;
 }
 
 export interface ProfileData {
@@ -48,6 +61,7 @@ export interface ProfileData {
   fixedExpenses: FixedExpense[];
   assets: Asset[];
   liabilities: Liability[];
+  loans: Loan[];
 }
 
 export interface Profile {
@@ -66,7 +80,7 @@ export enum Theme {
 
 export type Page = 'inicio' | 'resumen' | 'ajustes' | 'ingresos' | 'gastos' | 'patrimonio';
 
-export type TransactionTypeFilter = 'income' | 'expense' | 'transfer';
+export type TransactionTypeFilter = 'income' | 'expense' | 'transfer' | 'saving' | 'loan';
 export type PaymentMethodFilter = 'cash' | 'bank';
 
 export interface Filters {
@@ -75,4 +89,9 @@ export interface Filters {
   types: TransactionTypeFilter[];
   methods: PaymentMethodFilter[];
   bankAccounts: string[];
+}
+
+export interface PatrimonioFilters {
+  types: ('asset' | 'loan' | 'liability')[];
+  sources: string[];
 }
