@@ -40,7 +40,7 @@ const Gastos: React.FC<GastosProps> = ({
     onInitiateDeposit, onInitiateWithdrawal
 }) => {
     // FIX: Destructure categories, bankAccounts, and fixedExpenses from profile.data
-    const { data: { categories, bankAccounts, fixedExpenses }, currency } = profile;
+    const { data: { categories, bankAccounts, fixedExpenses, transactions }, currency } = profile;
     const [activeMethodId, setActiveMethodId] = useState<string | null>(null);
     const [isFormVisible, setIsFormVisible] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -246,6 +246,7 @@ const Gastos: React.FC<GastosProps> = ({
           isOpen={isFixedExpenseModalOpen}
           onClose={() => setIsFixedExpenseModalOpen(false)}
           fixedExpenses={fixedExpenses}
+          transactions={transactions}
           categories={categories}
           onAddFixedExpense={onAddFixedExpense}
           onDeleteFixedExpense={onDeleteFixedExpense}

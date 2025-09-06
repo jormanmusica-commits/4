@@ -21,6 +21,7 @@ interface PatrimonioProps {
     onDeleteAsset: (id: string) => void;
     onDeleteLiability: (id: string) => void;
     onDeleteLoan: (id: string) => void;
+    onOpenDebtPaymentModal: () => void;
 }
 
 type HistoryItemType = (Asset & { type: 'asset', amount: number, sourceDetails?: { name: string, color: string } }) |
@@ -92,10 +93,15 @@ const HistoryItem: React.FC<{
                             {config.typeLabel}
                         </span>
                         {sourceDetails && (
-                            <>
-                                <span>&bull;</span>
-                                <span className="font-medium" style={{ color: sourceDetails.color }}>{sourceDetails.name}</span>
-                            </>
+                           <span
+                             className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full"
+                             style={{
+                               backgroundColor: `${sourceDetails.color}20`,
+                               color: sourceDetails.color
+                             }}
+                           >
+                             {sourceDetails.name}
+                           </span>
                         )}
                     </div>
                 </div>
@@ -121,7 +127,8 @@ const HistoryItem: React.FC<{
 const Patrimonio: React.FC<PatrimonioProps> = ({
     profile, manualAssetsValue, totalLiabilities, totalLoans,
     assets, liabilities, loans, bankAccounts,
-    onDeleteAsset, onDeleteLiability, onDeleteLoan
+    onDeleteAsset, onDeleteLiability, onDeleteLoan,
+    onOpenDebtPaymentModal
 }) => {
     const { currency } = profile;
     const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
@@ -194,10 +201,13 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
     };
 
 
-    const SummaryCard: React.FC<{ title: string, amount: number, colorClass: string }> = ({ title, amount, colorClass }) => (
-        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg text-center">
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h3>
-            <p className={`text-2xl font-bold mt-1 ${colorClass}`}>{formatCurrency(amount)}</p>
+    const SummaryCard: React.FC<{ title: string, amount: number, colorClass: string, children?: React.ReactNode }> = ({ title, amount, colorClass, children }) => (
+        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg text-center flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h3>
+              <p className={`text-2xl font-bold mt-1 ${colorClass}`}>{formatCurrency(amount)}</p>
+            </div>
+            {children && <div className="mt-2">{children}</div>}
         </div>
     );
 
@@ -209,7 +219,16 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SummaryCard title="Ahorros" amount={manualAssetsValue} colorClass="text-green-500" />
-                <SummaryCard title="Deudas" amount={totalLiabilities} colorClass="text-red-500" />
+                <SummaryCard title="Deudas" amount={totalLiabilities} colorClass="text-red-500">
+                    {totalLiabilities > 0 && (
+                        <button
+                            onClick={onOpenDebtPaymentModal}
+                            className="text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-full px-4 py-1.5 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-red-500"
+                        >
+                            Pagar Deudas
+                        </button>
+                    )}
+                </SummaryCard>
                 <SummaryCard title="Préstamos" amount={totalLoans} colorClass="text-blue-500" />
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BankAccount } from '../types';
 import CloseIcon from './icons/CloseIcon';
 import AmountInput from './AmountInput';
@@ -29,6 +29,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [sourceMethodId, setSourceMethodId] = useState<string>(CASH_METHOD_ID);
     const [error, setError] = useState('');
+    const descriptionInputRef = useRef<HTMLInputElement>(null);
 
     const isAsset = type === 'asset';
     const isLoan = type === 'loan';
@@ -49,6 +50,21 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
             setError('');
         }
     }, [isOpen, isAsset, isLoan, balancesByMethod, bankAccounts]);
+
+    const sources = useMemo(() => [
+        { id: CASH_METHOD_ID, name: 'Efectivo', balance: balancesByMethod[CASH_METHOD_ID] || 0, color: '#008f39' },
+        ...bankAccounts.map(b => ({ id: b.id, name: b.name, balance: balancesByMethod[b.id] || 0, color: b.color }))
+    ], [bankAccounts, balancesByMethod]);
+
+    const selectedSourceDetails = useMemo(() => {
+        return sources.find(s => s.id === sourceMethodId);
+    }, [sourceMethodId, sources]);
+
+    const sourceSelectStyle: React.CSSProperties = selectedSourceDetails ? {
+        borderColor: selectedSourceDetails.color,
+        color: selectedSourceDetails.color,
+        fontWeight: '600',
+    } : {};
 
 
     if (!isOpen) return null;
@@ -106,11 +122,6 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
             buttonText: 'Guardar Deuda',
             themeColor: '#ef4444' // Red
         };
-
-    const sources = [
-        { id: CASH_METHOD_ID, name: 'Efectivo', balance: balancesByMethod[CASH_METHOD_ID] || 0 },
-        ...bankAccounts.map(b => ({ id: b.id, name: b.name, balance: balancesByMethod[b.id] || 0 }))
-    ];
 
     const formatCurrency = (amountValue: number) => {
         const locale = currency === 'COP' ? 'es-CO' : (currency === 'CLP' ? 'es-CL' : 'es-ES');
@@ -171,13 +182,14 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                                     id="source-method"
                                     value={sourceMethodId}
                                     onChange={(e) => setSourceMethodId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                    className="w-full px-3 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 transition-colors"
+                                    style={sourceSelectStyle}
                                 >
                                     {sources.map(source => {
                                         const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
                                         const disabled = source.balance < numericAmount;
                                         return (
-                                            <option key={source.id} value={source.id} disabled={disabled}>
+                                            <option key={source.id} value={source.id} disabled={disabled} style={{ color: 'initial', fontWeight: 'normal' }}>
                                                 {source.name} ({formatCurrency(source.balance)}) {disabled ? " - Fondos insuficientes" : ""}
                                             </option>
                                         );
@@ -197,12 +209,14 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                                 themeColor={modalConfig.themeColor}
                                 currency={currency}
                                 autoFocus={true}
+                                onSubmitted={() => descriptionInputRef.current?.focus()}
                             />
                             <div>
                                 <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Descripcion del prestamo
                                 </label>
                                 <input
+                                    ref={descriptionInputRef}
                                     type="text"
                                     id="item-name"
                                     value={name}
@@ -219,13 +233,14 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                                     id="source-method"
                                     value={sourceMethodId}
                                     onChange={(e) => setSourceMethodId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                    className="w-full px-3 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 transition-colors"
+                                    style={sourceSelectStyle}
                                 >
                                     {sources.map(source => {
                                         const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
                                         const disabled = source.balance < numericAmount;
                                         return (
-                                            <option key={source.id} value={source.id} disabled={disabled}>
+                                            <option key={source.id} value={source.id} disabled={disabled} style={{ color: 'initial', fontWeight: 'normal' }}>
                                                 {source.name} ({formatCurrency(source.balance)}) {disabled ? " - Fondos insuficientes" : ""}
                                             </option>
                                         );

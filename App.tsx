@@ -17,6 +17,7 @@ import PlusIcon from './components/icons/PlusIcon';
 import ArrowUpIcon from './components/icons/ArrowUpIcon';
 import ArrowDownIcon from './components/icons/ArrowDownIcon';
 import ScaleIcon from './components/icons/ScaleIcon';
+import DebtPaymentModal from './components/DebtPaymentModal';
 
 
 const CASH_METHOD_ID = 'efectivo';
@@ -283,6 +284,7 @@ const App: React.FC = () => {
   const [isProfileCreationModalOpen, setIsProfileCreationModalOpen] = useState(false);
   const [isFixedExpenseModalOpen, setIsFixedExpenseModalOpen] = useState(false);
   const [isAssetLiabilityModalOpen, setIsAssetLiabilityModalOpen] = useState(false);
+  const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability' | 'loan' } | null>(null);
 
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -705,6 +707,51 @@ const App: React.FC = () => {
     }));
   }, [activeProfile]);
 
+  const handlePayDebts = useCallback((liabilityIds: string[], paymentMethodId: string) => {
+    if (!activeProfile) return;
+
+    const liabilitiesToPay = (activeProfile.data.liabilities || []).filter(l => liabilityIds.includes(l.id));
+    if (liabilitiesToPay.length === 0) return;
+
+    const totalAmount = liabilitiesToPay.reduce((sum, l) => sum + l.amount, 0);
+    const sourceBalance = balancesByMethod[paymentMethodId] || 0;
+
+    if (totalAmount > sourceBalance) {
+        alert("Fondos insuficientes en la cuenta de origen.");
+        return;
+    }
+    
+    const generalCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'general');
+
+    const newTransactions: Transaction[] = liabilitiesToPay.map(liability => ({
+        id: crypto.randomUUID(),
+        description: `Pago de deuda: ${liability.name}`,
+        amount: liability.amount,
+        date: new Date().toISOString().split('T')[0],
+        type: 'expense',
+        paymentMethodId: paymentMethodId,
+        categoryId: generalCategory?.id,
+    }));
+
+    const updatedTransactions = [...newTransactions, ...activeProfile.data.transactions];
+    const updatedLiabilities = (activeProfile.data.liabilities || []).filter(l => !liabilityIds.includes(l.id));
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        transactions: updatedTransactions,
+        liabilities: updatedLiabilities,
+    }));
+
+    setIsDebtPaymentModalOpen(false);
+}, [activeProfile, balancesByMethod]);
+
   const summaryData = useMemo(() => {
     if (!activeProfile) {
         return {
@@ -1052,6 +1099,7 @@ const App: React.FC = () => {
                     onDeleteAsset={handleDeleteAsset}
                     onDeleteLiability={handleDeleteLiability}
                     onDeleteLoan={handleDeleteLoan}
+                    onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
                 />
             )}
           </main>
@@ -1135,6 +1183,7 @@ const App: React.FC = () => {
         isOpen={isFixedExpenseModalOpen}
         onClose={() => setIsFixedExpenseModalOpen(false)}
         fixedExpenses={activeProfile.data.fixedExpenses}
+        transactions={activeProfile.data.transactions}
         categories={activeProfile.data.categories}
         onAddFixedExpense={handleAddFixedExpense}
         onDeleteFixedExpense={handleDeleteFixedExpense}
@@ -1153,6 +1202,15 @@ const App: React.FC = () => {
         currency={activeProfile.currency}
         bankAccounts={activeProfile.data.bankAccounts}
         balancesByMethod={balancesByMethod}
+      />}
+      {activeProfile && <DebtPaymentModal
+        isOpen={isDebtPaymentModalOpen}
+        onClose={() => setIsDebtPaymentModalOpen(false)}
+        liabilities={activeProfile.data.liabilities || []}
+        bankAccounts={activeProfile.data.bankAccounts || []}
+        balancesByMethod={balancesByMethod}
+        onPayDebts={handlePayDebts}
+        currency={activeProfile.currency}
       />}
     </div>
   );

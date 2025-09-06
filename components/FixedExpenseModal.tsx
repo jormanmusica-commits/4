@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FixedExpense, Category } from '../types';
+import React, { useState, useMemo } from 'react';
+import { FixedExpense, Category, Transaction } from '../types';
 import CloseIcon from './icons/CloseIcon';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -13,11 +13,13 @@ import EntertainmentIcon from './icons/EntertainmentIcon';
 import HealthIcon from './icons/HealthIcon';
 import TagIcon from './icons/TagIcon';
 import ArrowDownIcon from './icons/ArrowDownIcon';
+import CheckIcon from './icons/CheckIcon';
 
 interface FixedExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   fixedExpenses: FixedExpense[];
+  transactions: Transaction[];
   categories: Category[];
   onAddFixedExpense: (name: string, amount: number, categoryId?: string) => void;
   onDeleteFixedExpense: (id: string) => void;
@@ -45,11 +47,34 @@ const CategoryIcon: React.FC<{ iconName: string; color: string; }> = ({ iconName
 };
 
 const FixedExpenseModal: React.FC<FixedExpenseModalProps> = ({ 
-    isOpen, onClose, fixedExpenses, categories, onAddFixedExpense, onDeleteFixedExpense, onSelectFixedExpense, currency,
+    isOpen, onClose, fixedExpenses, transactions, categories, onAddFixedExpense, onDeleteFixedExpense, onSelectFixedExpense, currency,
     onAddCategory, onUpdateCategory, onDeleteCategory
 }) => {
   const [newExpense, setNewExpense] = useState({ name: '', amount: '', categoryId: '' });
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+
+  const paidExpenseNames = useMemo(() => {
+    if (!isOpen) return new Set<string>();
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const paidNames = new Set<string>();
+
+    transactions
+        .filter(t => {
+            const transactionDate = new Date(t.date);
+            return t.type === 'expense' &&
+                    transactionDate.getMonth() === currentMonth &&
+                    transactionDate.getFullYear() === currentYear;
+        })
+        .forEach(t => {
+            paidNames.add(t.description);
+        });
+    
+    return paidNames;
+  }, [transactions, isOpen]);
 
   const formatCurrency = (amount: number) => {
     const locale = currency === 'COP' ? 'es-CO' : (currency === 'CLP' ? 'es-CL' : 'es-ES');
@@ -112,18 +137,25 @@ const FixedExpenseModal: React.FC<FixedExpenseModalProps> = ({
             ) : (
               fixedExpenses.map(exp => {
                 const category = categories.find(c => c.id === exp.categoryId);
+                const isPaid = paidExpenseNames.has(exp.name);
 
-                // FIX: Replaced dynamic ItemWrapper with a conditional render of button or div to ensure type safety.
                 const itemContent = (
                   <>
                     <div className="flex items-center space-x-4">
-                      <BoltIcon className="w-5 h-5 text-amber-500" />
+                      <BoltIcon className={`w-5 h-5 transition-colors ${isPaid ? 'text-gray-400' : 'text-amber-500'}`} />
                       <div>
-                        <span className="font-semibold">{exp.name}</span>
+                        <span className={`font-semibold transition-colors ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{exp.name}</span>
                         {category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{category.name}</p>}
                       </div>
                     </div>
-                    <span className="font-mono">{formatCurrency(exp.amount)}</span>
+                    <div className="flex items-center space-x-2">
+                        {isPaid && (
+                            <span title="Pagado este mes">
+                                <CheckIcon className="w-5 h-5 text-green-500" />
+                            </span>
+                        )}
+                        <span className={`font-mono transition-colors ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{formatCurrency(exp.amount)}</span>
+                    </div>
                   </>
                 );
 
