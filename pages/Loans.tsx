@@ -75,12 +75,6 @@ const Loans: React.FC<LoansProps> = ({ profile, loans, transactions, onOpenLoanR
                     </div>
                      <div className="flex items-center gap-1 flex-shrink-0">
                         <button
-                            onClick={(e) => { e.stopPropagation(); onRegisterPayment(); }}
-                            className="text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg px-3 py-1 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-blue-500"
-                        >
-                            Registrar Pago
-                        </button>
-                        <button
                             onClick={() => setIsExpanded(!isExpanded)}
                             className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                             aria-label={isExpanded ? "Cerrar detalles" : "Abrir detalles"}
@@ -107,6 +101,15 @@ const Loans: React.FC<LoansProps> = ({ profile, loans, transactions, onOpenLoanR
                         <span className="text-gray-500 dark:text-gray-400">Restante:</span>
                         <span className="font-bold text-blue-500">{formatCurrency(loan.amount)}</span>
                     </div>
+                </div>
+                
+                <div className="flex justify-end pt-2">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onRegisterPayment(); }}
+                        className="text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-blue-500"
+                    >
+                        Registrar Pago
+                    </button>
                 </div>
 
                 <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-96 opacity-100 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700' : 'max-h-0 opacity-0'}`}>

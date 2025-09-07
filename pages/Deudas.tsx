@@ -74,12 +74,6 @@ const Deudas: React.FC<DeudasProps> = ({ profile, liabilities, transactions, onO
                         <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">{formattedDate}</span>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                         <button
-                            onClick={(e) => { e.stopPropagation(); onRegisterPayment(); }}
-                            className="text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg px-3 py-1 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-red-500"
-                        >
-                            Pagar
-                        </button>
                         <button 
                             onClick={() => setIsExpanded(!isExpanded)} 
                             className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -107,6 +101,15 @@ const Deudas: React.FC<DeudasProps> = ({ profile, liabilities, transactions, onO
                         <span className="text-gray-500 dark:text-gray-400">Restante:</span>
                         <span className="font-bold text-red-500">{formatCurrency(liability.amount)}</span>
                     </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onRegisterPayment(); }}
+                        className="text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg px-4 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-red-500"
+                    >
+                        Pagar
+                    </button>
                 </div>
 
                 <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-96 opacity-100 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700' : 'max-h-0 opacity-0'}`}>
