@@ -1,4 +1,4 @@
-import { Profile } from '../types';
+import { Profile } from './types';
 
 const CASH_METHOD_ID = 'efectivo';
 
@@ -78,8 +78,16 @@ export const exportProfileToCsv = (payload: ExportPayload): string => {
   csvContent += toCsvRow(['Gastos (Total)', formatAmount(summary.totalExpenses)]);
   csvContent += '\r\n\r\n';
 
-  const { transactions, bankAccounts, fixedExpenses } = profile.data;
+  const { transactions, bankAccounts, fixedExpenses, assets, liabilities, loans } = profile.data;
   
+  const bankAccountMap = new Map(bankAccounts.map(b => [b.id, b.name]));
+  const getPaymentMethodName = (id?: string): string => {
+    if (!id) return 'N/A (Movimiento Inicial)';
+    if (id === CASH_METHOD_ID) return 'Efectivo';
+    // FIX: Changed from `||` to `??` (nullish coalescing operator) to be more explicit about handling `undefined` from `Map.get()`. This can help avoid type inference issues.
+    return bankAccountMap.get(id) ?? 'Cuenta Eliminada';
+  };
+
   // Section 7: Cuentas Bancarias
   csvContent += 'Cuentas Bancarias\r\n';
   csvContent += toCsvRow(['Nombre', 'Saldo Actual']);
@@ -92,27 +100,67 @@ export const exportProfileToCsv = (payload: ExportPayload): string => {
   // Section 8: Fixed Expenses
   csvContent += 'Gastos Fijos\r\n';
   csvContent += toCsvRow(['Nombre', 'Cantidad']);
-  fixedExpenses.forEach(fe => {
+  (fixedExpenses || []).forEach(fe => {
     csvContent += toCsvRow([fe.name, formatAmount(fe.amount)]);
   });
   csvContent += '\r\n\r\n';
 
-  // Section 9: Transactions
+  // Section 9: Assets (Ahorros)
+  if (assets && assets.length > 0) {
+    csvContent += 'Ahorros (Activos)\r\n';
+    csvContent += toCsvRow(['Nombre', 'Valor', 'Fecha', 'Origen de Fondos']);
+    assets.forEach(asset => {
+        csvContent += toCsvRow([
+            asset.name,
+            formatAmount(asset.value),
+            asset.date,
+            getPaymentMethodName(asset.sourceMethodId)
+        ]);
+    });
+    csvContent += '\r\n\r\n';
+  }
+
+  // Section 10: Liabilities (Deudas)
+  if (liabilities && liabilities.length > 0) {
+    csvContent += 'Deudas (Pasivos)\r\n';
+    csvContent += toCsvRow(['Nombre', 'Monto Original', 'Monto Restante', 'Fecha']);
+    liabilities.forEach(liability => {
+        csvContent += toCsvRow([
+            liability.name,
+            formatAmount(liability.originalAmount),
+            formatAmount(liability.amount),
+            liability.date
+        ]);
+    });
+    csvContent += '\r\n\r\n';
+  }
+
+  // Section 11: Loans (Préstamos a Terceros)
+  if (loans && loans.length > 0) {
+    csvContent += 'Prestamos a Terceros (Activos)\r\n';
+    csvContent += toCsvRow(['Nombre', 'Monto Original', 'Monto Restante', 'Fecha', 'Origen de Fondos']);
+    loans.forEach(loan => {
+        csvContent += toCsvRow([
+            loan.name,
+            formatAmount(loan.originalAmount),
+            formatAmount(loan.amount),
+            loan.date,
+            getPaymentMethodName(loan.sourceMethodId)
+        ]);
+    });
+    csvContent += '\r\n\r\n';
+  }
+
+  // Section 12: Transactions
   csvContent += 'Transacciones\r\n';
   csvContent += toCsvRow(['Fecha', 'Descripcion', 'Cantidad', 'Tipo', 'Metodo de Pago']);
-  const bankAccountMap = new Map(bankAccounts.map(b => [b.id, b.name]));
   const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   sortedTransactions.forEach(t => {
     const type = t.type === 'income' ? 'Ingreso' : 'Gasto';
     const amount = t.amount;
     
-    let paymentMethodName = 'Desconocido';
-    if (t.paymentMethodId === CASH_METHOD_ID) {
-      paymentMethodName = 'Efectivo';
-    } else {
-      paymentMethodName = bankAccountMap.get(t.paymentMethodId) || 'Cuenta Eliminada';
-    }
+    const paymentMethodName = getPaymentMethodName(t.paymentMethodId);
 
     csvContent += toCsvRow([
       t.date,
