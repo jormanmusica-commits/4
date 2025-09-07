@@ -3,6 +3,7 @@
 
 
 
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability, Loan } from './types';
 import Inicio from './pages/Inicio';
@@ -310,8 +311,8 @@ const App: React.FC = () => {
   const [isProfileCreationModalOpen, setIsProfileCreationModalOpen] = useState(false);
   const [isFixedExpenseModalOpen, setIsFixedExpenseModalOpen] = useState(false);
   const [isAssetLiabilityModalOpen, setIsAssetLiabilityModalOpen] = useState(false);
-  const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
-  const [isLoanRepaymentModalOpen, setIsLoanRepaymentModalOpen] = useState(false);
+  const [payingDebt, setPayingDebt] = useState<Liability | null>(null);
+  const [repayingLoan, setRepayingLoan] = useState<Loan | null>(null);
   const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability' | 'loan' } | null>(null);
 
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -787,7 +788,7 @@ const App: React.FC = () => {
         liabilities: updatedLiabilities,
     }));
 
-    setIsDebtPaymentModalOpen(false);
+    setPayingDebt(null);
 }, [activeProfile, balancesByMethod]);
 
 const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amount: number }[], paymentMethodId: string, date: string) => {
@@ -840,7 +841,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         loans: updatedLoans,
     }));
 
-    setIsLoanRepaymentModalOpen(false);
+    setRepayingLoan(null);
 }, [activeProfile]);
 
   const summaryData = useMemo(() => {
@@ -859,6 +860,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
     const currentYear = now.getFullYear();
 
     const ahorroCategoryId = categories.find(c => c.name.toLowerCase() === 'ahorro')?.id;
+    const prestamoCategoryId = categories.find(c => c.name.toLowerCase() === 'préstamos')?.id;
 
     let monthlyIncome = 0;
     let monthlyExpenses = 0;
@@ -868,12 +870,22 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
     let totalExpenses = 0;
 
     transactions.forEach(t => {
-        // Exclude transfers and savings from summary calculations for clarity
-        if (t.transferId || t.categoryId === ahorroCategoryId) return;
-
-        // Monthly calculation
         const transactionDate = new Date(t.date);
-        if (transactionDate.getMonth() === currentMonth && transactionDate.getFullYear() === currentYear) {
+        const isInCurrentMonth = transactionDate.getMonth() === currentMonth && transactionDate.getFullYear() === currentYear;
+
+        // Total calculation (includes everything)
+        if (t.type === 'income') {
+            totalIncome += t.amount;
+        } else { // expense
+            totalExpenses += t.amount;
+        }
+
+        // Monthly Summary Calculation (exclude transfers, savings creations, loan creations)
+        if (t.transferId || t.patrimonioType === 'asset' || t.patrimonioType === 'loan') {
+            return;
+        }
+
+        if (isInCurrentMonth) {
             if (t.type === 'income') {
                 monthlyIncome += t.amount;
                 monthlyIncomeByMethod[t.paymentMethodId] = (monthlyIncomeByMethod[t.paymentMethodId] || 0) + t.amount;
@@ -881,13 +893,6 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                 monthlyExpenses += t.amount;
                 monthlyExpensesByMethod[t.paymentMethodId] = (monthlyExpensesByMethod[t.paymentMethodId] || 0) + t.amount;
             }
-        }
-        
-        // Total calculation
-        if (t.type === 'income') {
-            totalIncome += t.amount;
-        } else { // expense
-            totalExpenses += t.amount;
         }
     });
       
@@ -1203,7 +1208,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                     profile={activeProfile}
                     loans={activeProfile.data.loans || []}
                     transactions={activeProfile.data.transactions || []}
-                    onOpenLoanRepaymentModal={() => setIsLoanRepaymentModalOpen(true)}
+                    onOpenLoanRepaymentModal={(loan) => setRepayingLoan(loan)}
                     onNavigate={handleNavigate}
                     currency={activeProfile.currency}
                 />
@@ -1213,7 +1218,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                     profile={activeProfile}
                     liabilities={activeProfile.data.liabilities || []}
                     transactions={activeProfile.data.transactions || []}
-                    onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
+                    onOpenDebtPaymentModal={(debt) => setPayingDebt(debt)}
                     onNavigate={handleNavigate}
                     currency={activeProfile.currency}
                 />
@@ -1318,18 +1323,18 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         balancesByMethod={balancesByMethod}
       />}
       {activeProfile && <DebtPaymentModal
-        isOpen={isDebtPaymentModalOpen}
-        onClose={() => setIsDebtPaymentModalOpen(false)}
-        liabilities={activeProfile.data.liabilities || []}
+        isOpen={!!payingDebt}
+        onClose={() => setPayingDebt(null)}
+        liability={payingDebt}
         bankAccounts={activeProfile.data.bankAccounts || []}
         balancesByMethod={balancesByMethod}
         onPayDebts={handlePayDebts}
         currency={activeProfile.currency}
       />}
       {activeProfile && <LoanRepaymentModal
-        isOpen={isLoanRepaymentModalOpen}
-        onClose={() => setIsLoanRepaymentModalOpen(false)}
-        loans={activeProfile.data.loans || []}
+        isOpen={!!repayingLoan}
+        onClose={() => setRepayingLoan(null)}
+        loan={repayingLoan}
         bankAccounts={activeProfile.data.bankAccounts || []}
         balancesByMethod={balancesByMethod}
         onReceiveLoanPayments={handleReceiveLoanPayments}

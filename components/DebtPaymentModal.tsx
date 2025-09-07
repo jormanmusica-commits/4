@@ -8,7 +8,7 @@ const CASH_METHOD_ID = 'efectivo';
 interface DebtPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  liabilities: Liability[];
+  liability: Liability | null;
   bankAccounts: BankAccount[];
   balancesByMethod: Record<string, number>;
   onPayDebts: (payments: { liabilityId: string, amount: number }[], paymentMethodId: string) => void;
@@ -16,10 +16,9 @@ interface DebtPaymentModalProps {
 }
 
 const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
-  isOpen, onClose, liabilities, bankAccounts, balancesByMethod, onPayDebts, currency
+  isOpen, onClose, liability, bankAccounts, balancesByMethod, onPayDebts, currency
 }) => {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [paymentAmounts, setPaymentAmounts] = useState<Record<string, string>>({});
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethodId, setPaymentMethodId] = useState<string>('');
   const [error, setError] = useState('');
 
@@ -39,48 +38,19 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
   ], [bankAccounts, balancesByMethod]);
 
   useEffect(() => {
-    if (isOpen) {
-      setSelectedIds([]);
-      setPaymentAmounts({});
+    if (isOpen && liability) {
+      setPaymentAmount(liability.amount.toString().replace('.', ','));
       setError('');
       // Pre-select the first available source if none is selected or the current one is invalid
       if (!paymentMethodId || !paymentSources.find(p => p.id === paymentMethodId)) {
         setPaymentMethodId(paymentSources.length > 0 ? paymentSources[0].id : '');
       }
     }
-  }, [isOpen, paymentSources]);
+  }, [isOpen, liability, paymentMethodId, paymentSources]);
+
+  const numericPaymentAmount = parseFloat((paymentAmount || '0').replace(',', '.'));
   
-  const totalToPay = useMemo(() => {
-    return selectedIds
-      .reduce((sum, id) => {
-        const amountStr = (paymentAmounts[id] || '0').replace(',', '.');
-        return sum + (parseFloat(amountStr) || 0);
-      }, 0);
-  }, [selectedIds, paymentAmounts]);
-
-  const handleToggleSelection = (id: string) => {
-    const liability = liabilities.find(l => l.id === id)!;
-    setSelectedIds(prev => {
-        const isSelected = prev.includes(id);
-        if (isSelected) {
-            setPaymentAmounts(p => {
-                const newP = { ...p };
-                delete newP[id];
-                return newP;
-            });
-            return prev.filter(i => i !== id);
-        } else {
-            setPaymentAmounts(p => ({
-                ...p,
-                [id]: liability.amount.toString().replace('.', ',')
-            }));
-            return [...prev, id];
-        }
-    });
-  };
-
-  const handleAmountChange = (id: string, value: string) => {
-    const liability = liabilities.find(l => l.id === id);
+  const handleAmountChange = (value: string) => {
     if (!liability) return;
 
     if (value === '' || /^[0-9]*[.,]?[0-9]{0,2}$/.test(value)) {
@@ -88,26 +58,19 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
         if (isNaN(numericValue)) numericValue = 0;
         
         if (numericValue > liability.amount) {
-            setPaymentAmounts(prev => ({
-                ...prev,
-                [id]: liability.amount.toString().replace('.', ',')
-            }));
+            setPaymentAmount(liability.amount.toString().replace('.', ','));
         } else {
-            setPaymentAmounts(prev => ({ ...prev, [id]: value }));
+            setPaymentAmount(value);
         }
     }
   };
 
   const handleSubmit = () => {
+    if (!liability) return;
     setError('');
 
-    const payments = selectedIds.map(id => ({
-        liabilityId: id,
-        amount: parseFloat((paymentAmounts[id] || '0').replace(',', '.'))
-    })).filter(p => p.amount > 0);
-
-    if (payments.length === 0) {
-        setError('Debes seleccionar al menos una deuda e introducir un monto a pagar.');
+    if (numericPaymentAmount <= 0) {
+        setError('Debes introducir un monto a pagar.');
         return;
     }
     if (!paymentMethodId) {
@@ -115,14 +78,15 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
       return;
     }
     const source = paymentSources.find(s => s.id === paymentMethodId);
-    if (!source || source.balance < totalToPay) {
+    if (!source || source.balance < numericPaymentAmount) {
       setError('Fondos insuficientes en la cuenta de origen.');
       return;
     }
-    onPayDebts(payments, paymentMethodId);
+    const payment = { liabilityId: liability.id, amount: numericPaymentAmount };
+    onPayDebts([payment], paymentMethodId);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !liability) return null;
   
   const selectedSourceDetails = paymentSources.find(s => s.id === paymentMethodId);
   const sourceSelectStyle: React.CSSProperties = selectedSourceDetails ? {
@@ -144,66 +108,39 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 id="debt-payment-modal-title" className="text-xl font-bold">Pagar Deudas</h2>
+          <h2 id="debt-payment-modal-title" className="text-xl font-bold">Pagar Deuda</h2>
           <button onClick={onClose} aria-label="Cerrar modal" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
             <CloseIcon />
           </button>
         </header>
 
-        <div className="p-4 space-y-3 overflow-y-auto">
-          <p className="text-sm text-gray-600 dark:text-gray-400">Selecciona las deudas que quieres liquidar y edita el monto si es un pago parcial.</p>
-          {liabilities.map(liability => {
-              const isSelected = selectedIds.includes(liability.id);
-              const isPartial = liability.originalAmount && liability.amount < liability.originalAmount;
-              return (
-                  <div key={liability.id} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 transition-colors">
-                      <div className="flex items-center justify-between">
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                              <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleSelection(liability.id)}
-                                  className="h-5 w-5 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                                  style={{ accentColor: '#ef4444' }}
-                              />
-                              <span className="font-medium">{liability.name}</span>
-                          </label>
-                          <div className="text-right">
-                            <span className="font-mono font-semibold text-red-500">{formatCurrency(liability.amount)}</span>
-                            {isPartial && <p className="text-xs text-gray-500 dark:text-gray-400">de {formatCurrency(liability.originalAmount)}</p>}
-                          </div>
-                      </div>
-                      {isSelected && (
-                          <div className="mt-2 pl-8 animate-fade-in">
-                              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Monto a pagar:</label>
-                              <div className="relative mt-1">
-                                  <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={paymentAmounts[liability.id] || ''}
-                                      onChange={(e) => handleAmountChange(liability.id, e.target.value)}
-                                      className="w-full pl-3 pr-12 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700"
-                                  />
-                                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400 font-semibold">
-                                      {currency}
-                                  </span>
-                              </div>
-                          </div>
-                      )}
-                  </div>
-              )
-          })}
+        <div className="p-4 space-y-4 overflow-y-auto">
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div className="flex items-center justify-between">
+                    <span className="font-medium text-lg">{liability.name}</span>
+                    <span className="font-mono font-semibold text-red-500">{formatCurrency(liability.amount)}</span>
+                </div>
+            </div>
+            <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Monto a pagar:</label>
+                <div className="relative mt-1">
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        value={paymentAmount}
+                        onChange={(e) => handleAmountChange(e.target.value)}
+                        className="w-full pl-3 pr-12 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700"
+                        autoFocus
+                    />
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400 font-semibold">
+                        {currency}
+                    </span>
+                </div>
+            </div>
         </div>
 
 
         <footer className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto space-y-4">
-          <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-800">
-            <div className="flex justify-between items-center text-lg">
-              <span className="font-semibold">Total a Pagar:</span>
-              <span className="font-bold text-red-500">{formatCurrency(totalToPay)}</span>
-            </div>
-          </div>
-          
           <div>
             <label htmlFor="payment-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Pagar con
@@ -212,15 +149,15 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
               id="payment-method"
               value={paymentMethodId}
               onChange={(e) => setPaymentMethodId(e.target.value)}
-              disabled={totalToPay <= 0}
+              disabled={numericPaymentAmount <= 0}
               className="w-full px-3 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-gray-50 dark:bg-gray-700 transition-colors disabled:opacity-50"
               style={sourceSelectStyle}
             >
               <option value="" disabled>Seleccionar origen</option>
               {paymentSources.map(source => (
-                <option key={source.id} value={source.id} disabled={source.balance < totalToPay} style={{ color: 'initial', fontWeight: 'normal' }}>
+                <option key={source.id} value={source.id} disabled={source.balance < numericPaymentAmount} style={{ color: 'initial', fontWeight: 'normal' }}>
                   {source.name} ({formatCurrency(source.balance)})
-                  {source.balance < totalToPay ? ' - Fondos insuficientes' : ''}
+                  {source.balance < numericPaymentAmount ? ' - Fondos insuficientes' : ''}
                 </option>
               ))}
             </select>
@@ -230,10 +167,10 @@ const DebtPaymentModal: React.FC<DebtPaymentModalProps> = ({
           
           <button
             onClick={handleSubmit}
-            disabled={totalToPay <= 0 || !paymentMethodId || (paymentSources.find(s => s.id === paymentMethodId)?.balance || 0) < totalToPay}
+            disabled={numericPaymentAmount <= 0 || !paymentMethodId || (paymentSources.find(s => s.id === paymentMethodId)?.balance || 0) < numericPaymentAmount}
             className="w-full bg-red-500 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            Pagar {formatCurrency(totalToPay)}
+            Pagar {formatCurrency(numericPaymentAmount)}
           </button>
         </footer>
       </div>

@@ -8,7 +8,7 @@ interface DeudasProps {
   profile: Profile;
   liabilities: Liability[];
   transactions: Transaction[];
-  onOpenDebtPaymentModal: () => void;
+  onOpenDebtPaymentModal: (liability: Liability) => void;
   onNavigate: (page: Page) => void;
   currency: string;
 }
@@ -25,7 +25,7 @@ const Deudas: React.FC<DeudasProps> = ({ profile, liabilities, transactions, onO
         }).format(amount);
     };
 
-    const DebtCard: React.FC<{ liability: Liability, bankAccounts: BankAccount[] }> = ({ liability, bankAccounts }) => {
+    const DebtCard: React.FC<{ liability: Liability, bankAccounts: BankAccount[], onRegisterPayment: () => void }> = ({ liability, bankAccounts, onRegisterPayment }) => {
         const [isExpanded, setIsExpanded] = useState(false);
         const paidAmount = liability.originalAmount - liability.amount;
         const progress = liability.originalAmount > 0 ? (paidAmount / liability.originalAmount) * 100 : 0;
@@ -63,19 +63,31 @@ const Deudas: React.FC<DeudasProps> = ({ profile, liabilities, transactions, onO
 
         return (
             <div
-                className="bg-white dark:bg-gray-800/50 p-4 rounded-xl shadow-md space-y-3 transition-all duration-300 cursor-pointer"
-                onClick={() => setIsExpanded(!isExpanded)}
-                role="button"
-                tabIndex={0}
-                aria-expanded={isExpanded}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded); } }}
+                className="bg-white dark:bg-gray-800/50 p-4 rounded-xl shadow-md space-y-3 transition-all duration-300"
             >
-                <div className="flex justify-between items-center">
-                    <div className="flex items-baseline gap-2 min-w-0">
+                <div className="flex justify-between items-start">
+                    <div 
+                        className="flex-grow flex items-baseline gap-2 min-w-0 cursor-pointer"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                    >
                         <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100 truncate">{liability.name}</h3>
                         <span className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">{formattedDate}</span>
                     </div>
-                    <svg className={`w-6 h-6 text-gray-500 transform transition-transform duration-300 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                         <button
+                            onClick={(e) => { e.stopPropagation(); onRegisterPayment(); }}
+                            className="text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg px-3 py-1 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-red-500"
+                        >
+                            Pagar
+                        </button>
+                        <button 
+                            onClick={() => setIsExpanded(!isExpanded)} 
+                            className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                            aria-label={isExpanded ? "Cerrar detalles" : "Abrir detalles"}
+                        >
+                            <svg className={`w-6 h-6 text-gray-500 transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                    </div>
                 </div>
                 
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
@@ -149,18 +161,9 @@ const Deudas: React.FC<DeudasProps> = ({ profile, liabilities, transactions, onO
                 </h1>
             </header>
 
-            {liabilities.length > 0 && (
-                <button
-                    onClick={onOpenDebtPaymentModal}
-                    className="w-full text-center font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg px-4 py-3 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 focus:ring-red-500"
-                >
-                    Pagar Deudas
-                </button>
-            )}
-
             <div className="space-y-4">
                 {liabilities.length > 0 ? (
-                    liabilities.map(liability => <DebtCard key={liability.id} liability={liability} bankAccounts={bankAccounts} />)
+                    liabilities.map(liability => <DebtCard key={liability.id} liability={liability} bankAccounts={bankAccounts} onRegisterPayment={() => onOpenDebtPaymentModal(liability)} />)
                 ) : (
                     <div className="text-center py-10 px-6 bg-white dark:bg-gray-800 rounded-xl shadow-inner">
                         <p className="text-gray-500 dark:text-gray-400">¡Felicidades! No tienes deudas activas en este momento.</p>
