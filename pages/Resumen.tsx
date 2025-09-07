@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Profile, Filters, TransactionTypeFilter } from '../types';
+import { Profile, Filters, TransactionTypeFilter, Transaction } from '../types';
 import Summary from '../components/Summary';
 import TransactionList from '../components/IncomeList';
 import MonthlySummary from '../components/MonthlySummary';
@@ -7,13 +7,13 @@ import GlobalSummary from '../components/GlobalSummary';
 import MonthlyBreakdownModal from '../components/MonthlyBreakdownModal';
 import FilterPanel from '../components/FilterPanel';
 import FilterIcon from '../components/icons/FilterIcon';
+import TransactionDetailModal from '../components/TransactionDetailModal';
 
 interface ResumenProps {
   profile: Profile;
   balance: number;
   balancesByMethod: Record<string, number>;
   onDeleteTransaction: (id: string) => void;
-  onUpdateTransaction: (id: string, newDescription: string, newAmount: number) => string | void;
   onInitiateDeposit: () => void;
   onInitiateWithdrawal: () => void;
   monthlyIncome: number;
@@ -29,7 +29,7 @@ interface ResumenProps {
 const CASH_METHOD_ID = 'efectivo';
 
 const Resumen: React.FC<ResumenProps> = ({ 
-  profile, balance, balancesByMethod, onDeleteTransaction, onUpdateTransaction,
+  profile, balance, balancesByMethod, onDeleteTransaction,
   onInitiateDeposit, onInitiateWithdrawal,
   monthlyIncome, monthlyExpenses,
   monthlyIncomeByBank, monthlyIncomeByCash,
@@ -40,15 +40,15 @@ const Resumen: React.FC<ResumenProps> = ({
   const [modalType, setModalType] = useState<'income' | 'expense' | null>(null);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Filters | null>(null);
-  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [detailTransaction, setDetailTransaction] = useState<Transaction | null>(null);
 
   const ahorroCategoryId = useMemo(() => {
     return categories.find(c => c.name.toLowerCase() === 'ahorro')?.id;
   }, [categories]);
   
   const handleApplyFilters = (newFilters: Filters) => {
-    const { startDate, endDate, types, methods, bankAccounts } = newFilters;
-    const isFilterActive = !!startDate || !!endDate || types.length > 0 || methods.length > 0 || bankAccounts.length > 0;
+    const { startDate, endDate, types, methods, bankAccounts, categories } = newFilters;
+    const isFilterActive = !!startDate || !!endDate || types.length > 0 || methods.length > 0 || bankAccounts.length > 0 || categories.length > 0;
     setActiveFilters(isFilterActive ? newFilters : null);
     setIsFilterPanelOpen(false);
   };
@@ -56,7 +56,7 @@ const Resumen: React.FC<ResumenProps> = ({
   const filteredTransactions = useMemo(() => {
     if (!activeFilters) return transactions;
 
-    const { startDate, endDate, types, methods, bankAccounts: filteredBankAccounts } = activeFilters;
+    const { startDate, endDate, types, methods, bankAccounts: filteredBankAccounts, categories: filteredCategories } = activeFilters;
     
     const start = startDate ? new Date(startDate) : null;
     if (start) start.setUTCHours(0,0,0,0);
@@ -66,6 +66,7 @@ const Resumen: React.FC<ResumenProps> = ({
     const hasTypeFilter = types.length > 0;
     const hasMethodFilter = methods.length > 0;
     const hasBankFilter = filteredBankAccounts.length > 0;
+    const hasCategoryFilter = filteredCategories.length > 0;
 
     return transactions.filter(t => {
         const transactionDate = new Date(t.date);
@@ -97,6 +98,12 @@ const Resumen: React.FC<ResumenProps> = ({
             
             if (!isCash && hasBankFilter) {
                 if (!filteredBankAccounts.includes(t.paymentMethodId)) return false;
+            }
+        }
+        
+        if (hasCategoryFilter) {
+            if (!t.categoryId || !filteredCategories.includes(t.categoryId)) {
+                return false;
             }
         }
 
@@ -154,9 +161,7 @@ const Resumen: React.FC<ResumenProps> = ({
           categories={categories}
           bankAccounts={bankAccounts}
           onDeleteTransaction={onDeleteTransaction}
-          onUpdateTransaction={onUpdateTransaction}
-          editingTransactionId={editingTransactionId}
-          onSetEditingTransactionId={setEditingTransactionId}
+          onItemClick={setDetailTransaction}
           currency={currency}
         />
       </div>
@@ -176,6 +181,15 @@ const Resumen: React.FC<ResumenProps> = ({
         onApply={handleApplyFilters}
         currentFilters={activeFilters}
         bankAccounts={bankAccounts}
+        categories={categories}
+      />
+      <TransactionDetailModal
+        isOpen={!!detailTransaction}
+        onClose={() => setDetailTransaction(null)}
+        transaction={detailTransaction}
+        categories={categories}
+        bankAccounts={bankAccounts}
+        currency={currency}
       />
     </div>
   );

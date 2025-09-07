@@ -142,9 +142,17 @@ const FixedExpenseModal: React.FC<FixedExpenseModalProps> = ({
                 const itemContent = (
                   <>
                     <div className="flex items-center space-x-4">
-                      <BoltIcon className={`w-5 h-5 transition-colors ${isPaid ? 'text-gray-400' : 'text-amber-500'}`} />
+                      {category ? (
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${category.color}20` }}>
+                            <CategoryIcon iconName={category.icon} color={category.color} />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-200 dark:bg-gray-700">
+                            <BoltIcon className="w-5 h-5 text-gray-500" />
+                        </div>
+                      )}
                       <div>
-                        <span className={`font-semibold transition-colors ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{exp.name}</span>
+                        <span className={`font-semibold transition-colors ${isPaid ? 'line-through' : ''}`}>{exp.name}</span>
                         {category && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{category.name}</p>}
                       </div>
                     </div>
@@ -154,7 +162,7 @@ const FixedExpenseModal: React.FC<FixedExpenseModalProps> = ({
                                 <CheckIcon className="w-5 h-5 text-green-500" />
                             </span>
                         )}
-                        <span className={`font-mono transition-colors ${isPaid ? 'line-through text-gray-500 dark:text-gray-400' : ''}`}>{formatCurrency(exp.amount)}</span>
+                        <span className={`font-mono transition-colors ${isPaid ? 'line-through' : ''}`}>{formatCurrency(exp.amount)}</span>
                     </div>
                   </>
                 );
@@ -164,7 +172,8 @@ const FixedExpenseModal: React.FC<FixedExpenseModalProps> = ({
                     {onSelectFixedExpense ? (
                       <button
                         onClick={() => onSelectFixedExpense(exp)}
-                        className="flex-grow w-full flex items-center justify-between p-3 rounded-lg text-left"
+                        disabled={isPaid}
+                        className="flex-grow w-full flex items-center justify-between p-3 rounded-lg text-left disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {itemContent}
                       </button>

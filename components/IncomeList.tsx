@@ -7,9 +7,7 @@ interface TransactionListProps {
   categories: Category[];
   bankAccounts: BankAccount[];
   onDeleteTransaction: (id: string) => void;
-  onUpdateTransaction: (id: string, newDescription: string, newAmount: number) => string | void;
-  editingTransactionId: string | null;
-  onSetEditingTransactionId: (id: string | null) => void;
+  onItemClick: (transaction: Transaction) => void;
   currency: string;
 }
 
@@ -36,16 +34,13 @@ const formatDateHeader = (dateString: string): string => {
 
 const TransactionList: React.FC<TransactionListProps> = ({
   transactions, categories, bankAccounts,
-  onDeleteTransaction, onUpdateTransaction,
-  editingTransactionId, onSetEditingTransactionId,
+  onDeleteTransaction, onItemClick,
   currency 
 }) => {
   const groupedTransactions = useMemo(() => {
-    // New transactions are added to the start of the array, so the relative order is newest first.
-    // We sort primarily by date, but since sort is stable in modern engines, the relative order for same-day items is preserved.
-    const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    return sortedTransactions.reduce((acc, transaction) => {
+    // The `transactions` array from props is already sorted with newest items first.
+    // We just need to group them by date, preserving that order.
+    return transactions.reduce((acc, transaction) => {
       const date = transaction.date;
       if (!acc[date]) {
         acc[date] = [];
@@ -81,9 +76,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                 category={transaction.categoryId ? categories.find(c => c.id === transaction.categoryId) : undefined}
                 bankAccounts={bankAccounts}
                 onDelete={onDeleteTransaction}
-                onUpdate={onUpdateTransaction}
-                isEditing={editingTransactionId === transaction.id}
-                onSetEditing={onSetEditingTransactionId}
+                onItemClick={onItemClick}
                 currency={currency}
               />
             ))}

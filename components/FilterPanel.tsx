@@ -1,6 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Filters, TransactionTypeFilter, PaymentMethodFilter, BankAccount } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Filters, TransactionTypeFilter, PaymentMethodFilter, BankAccount, Category } from '../types';
 import CloseIcon from './icons/CloseIcon';
+import FoodIcon from './icons/FoodIcon';
+import TransportIcon from './icons/TransportIcon';
+import ClothingIcon from './icons/ClothingIcon';
+import HouseIcon from './icons/HouseIcon';
+import EntertainmentIcon from './icons/EntertainmentIcon';
+import HealthIcon from './icons/HealthIcon';
+import TagIcon from './icons/TagIcon';
+import ArrowDownIcon from './icons/ArrowDownIcon';
+import ScaleIcon from './icons/ScaleIcon';
 
 interface FilterPanelProps {
   isOpen: boolean;
@@ -8,6 +17,7 @@ interface FilterPanelProps {
   onApply: (filters: Filters) => void;
   currentFilters: Filters | null;
   bankAccounts: BankAccount[];
+  categories: Category[];
 }
 
 const defaultFilters: Filters = {
@@ -16,16 +26,49 @@ const defaultFilters: Filters = {
   types: [],
   methods: [],
   bankAccounts: [],
+  categories: [],
 };
 
-const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, currentFilters, bankAccounts }) => {
+const CategoryIcon: React.FC<{ iconName: string; color: string; }> = ({ iconName, color }) => {
+  const iconProps = { className: "w-5 h-5", style: { color } };
+  switch (iconName) {
+    case 'Food': return <FoodIcon {...iconProps} />;
+    case 'Transport': return <TransportIcon {...iconProps} />;
+    case 'Clothing': return <ClothingIcon {...iconProps} />;
+    case 'House': return <HouseIcon {...iconProps} />;
+    case 'Entertainment': return <EntertainmentIcon {...iconProps} />;
+    case 'Health': return <HealthIcon {...iconProps} />;
+    case 'ArrowDown': return <ArrowDownIcon {...iconProps} />;
+    case 'Scale': return <ScaleIcon {...iconProps} />;
+    case 'Tag':
+    default:
+      return <TagIcon {...iconProps} />;
+  }
+};
+
+const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, currentFilters, bankAccounts, categories }) => {
   const [localFilters, setLocalFilters] = useState<Filters>(currentFilters || defaultFilters);
+  const [categorySearch, setCategorySearch] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setLocalFilters(currentFilters || defaultFilters);
+      setCategorySearch('');
     }
   }, [isOpen, currentFilters]);
+
+  const isCategoryFilterDisabled = useMemo(() => {
+    const relevantTypes: TransactionTypeFilter[] = ['expense', 'saving', 'loan'];
+    // Disable if a type filter is active AND none of the selected types are relevant for categories.
+    return localFilters.types.length > 0 && !localFilters.types.some(type => relevantTypes.includes(type));
+  }, [localFilters.types]);
+  
+  useEffect(() => {
+    // When the category filter becomes disabled, clear any selected categories
+    if (isCategoryFilterDisabled) {
+      setLocalFilters(prev => ({...prev, categories: []}));
+    }
+  }, [isCategoryFilterDisabled]);
 
   if (!isOpen) return null;
 
@@ -47,8 +90,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
       
       const newFilters = { ...prev, [key]: newValues };
 
-      // Si se deselecciona "bank", limpiar la selección de bancos
-      // FIX: Used `value` in `includes` check to satisfy TypeScript generic type constraints.
+      // If "bank" method is deselected, also clear selected bank accounts
+      // FIX: Removed incorrect type assertion `as PaymentMethodFilter`. The `value` is already of the correct generic type `T` for the `includes` method on `T[]`.
       if (key === 'methods' && value === 'bank' && !newValues.includes(value)) {
         newFilters.bankAccounts = [];
       }
@@ -83,7 +126,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex flex-col justify-end" onClick={onClose}>
       <div 
-        className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl w-full animate-slide-up"
+        className="bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl w-full max-w-md animate-slide-up"
         onClick={e => e.stopPropagation()}
       >
         <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
@@ -93,19 +136,20 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
           </button>
         </header>
 
-        <div className="p-4 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* Date Range */}
-          <div className="space-y-2">
-            <h3 className="font-semibold">Rango de Fechas</h3>
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          
+          <section aria-labelledby="date-range-heading">
+            <h3 id="date-range-heading" className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Rango de Fechas</h3>
             <div className="grid grid-cols-2 gap-3">
               <input type="date" value={localFilters.startDate} onChange={e => setLocalFilters(f => ({...f, startDate: e.target.value}))} className="input-style" aria-label="Fecha de inicio"/>
-              <input type="date" value={localFilters.endDate} onChange={e => setLocalFilters(f => ({...f, endDate: e.target.value}))} className="input-style" aria-label="Fecha de fin"/>
+              <input type="date" value={localFilters.endDate} onChange={e => setLocalFilters(f => ({...f, endDate: e.target.value}))} min={localFilters.startDate} className="input-style" aria-label="Fecha de fin"/>
             </div>
-          </div>
+          </section>
 
-          {/* Transaction Type */}
-          <div className="space-y-2">
-            <h3 className="font-semibold">Tipo de Transacción</h3>
+          <hr className="border-gray-200 dark:border-gray-700/50" />
+          
+          <section aria-labelledby="transaction-type-heading">
+            <h3 id="transaction-type-heading" className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Tipo de Transacción</h3>
             <div className="flex flex-wrap gap-2">
               {typeOptions.map(opt => (
                 <ToggleButton key={opt.value} active={localFilters.types.includes(opt.value)} onClick={() => handleToggle('types', opt.value)}>
@@ -113,11 +157,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
                 </ToggleButton>
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* Payment Method */}
-          <div className="space-y-2">
-            <h3 className="font-semibold">Método de Pago</h3>
+          <hr className="border-gray-200 dark:border-gray-700/50" />
+          
+          <section aria-labelledby="payment-method-heading">
+            <h3 id="payment-method-heading" className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Método de Pago</h3>
             <div className="flex flex-wrap gap-2">
               {methodOptions.map(opt => (
                 <ToggleButton key={opt.value} active={localFilters.methods.includes(opt.value)} onClick={() => handleToggle('methods', opt.value)}>
@@ -125,28 +170,70 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ isOpen, onClose, onApply, cur
                 </ToggleButton>
               ))}
             </div>
-          </div>
-          
-          {/* Bank Accounts (Conditional) */}
-          {localFilters.methods.includes('bank') && (
-            <div className="space-y-2 animate-fade-in">
-              <h3 className="font-semibold">Cuentas Bancarias</h3>
-              <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-                {bankAccounts.map(acc => (
-                  <label key={acc.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            
+            {localFilters.methods.includes('bank') && (
+              <div className="mt-4 space-y-2 animate-fade-in">
+                <h4 className="font-semibold text-sm text-gray-600 dark:text-gray-400">Cuentas Bancarias</h4>
+                <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
+                  {bankAccounts.map(acc => (
+                    <label key={acc.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={localFilters.bankAccounts.includes(acc.id)}
+                        onChange={() => handleToggle('bankAccounts', acc.id)}
+                        className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        style={{accentColor: acc.color}}
+                      />
+                      <span className="font-medium">{acc.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <hr className="border-gray-200 dark:border-gray-700/50" />
+
+          <section aria-labelledby="categories-heading" className={`transition-opacity duration-300 ${isCategoryFilterDisabled ? 'opacity-50' : ''}`}>
+            <h3 id="categories-heading" className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Categorías</h3>
+             {isCategoryFilterDisabled && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 -mt-1">
+                Las categorías solo aplican a gastos, ahorros y préstamos.
+              </p>
+            )}
+            <div className={isCategoryFilterDisabled ? 'pointer-events-none' : ''}>
+              <input
+                  type="text"
+                  placeholder="Buscar categoría..."
+                  value={categorySearch}
+                  onChange={e => setCategorySearch(e.target.value)}
+                  className="input-style w-full mb-2"
+                  disabled={isCategoryFilterDisabled}
+              />
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
+                {categories
+                  .filter(cat => cat.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                  .map(cat => (
+                  <label key={cat.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={localFilters.bankAccounts.includes(acc.id)}
-                      onChange={() => handleToggle('bankAccounts', acc.id)}
+                      checked={localFilters.categories.includes(cat.id)}
+                      onChange={() => handleToggle('categories', cat.id)}
                       className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      style={{accentColor: acc.color}}
+                      style={{ accentColor: cat.color }}
+                      disabled={isCategoryFilterDisabled}
                     />
-                    <span className="font-medium">{acc.name}</span>
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${cat.color}20` }}>
+                            <CategoryIcon iconName={cat.icon} color={cat.color} />
+                        </div>
+                        <span className="font-medium">{cat.name}</span>
+                    </div>
                   </label>
                 ))}
               </div>
             </div>
-          )}
+          </section>
         </div>
 
         <footer className="grid grid-cols-2 gap-3 p-4 border-t border-gray-200 dark:border-gray-700">

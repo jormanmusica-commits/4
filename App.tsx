@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability, Loan } from './types';
 import Inicio from './pages/Inicio';
@@ -7,6 +9,8 @@ import BottomNav from './components/BottomNav';
 import Ingresos from './pages/Ingresos';
 import Gastos from './pages/Gastos';
 import Patrimonio from './pages/Patrimonio';
+import Loans from './pages/Loans';
+import Deudas from './pages/Deudas';
 import TransferModal from './components/TransferModal';
 import { validateTransactionChange, findFirstIncomeDate } from './utils/transactionUtils';
 import ProfileCreationModal from './components/ProfileCreationModal';
@@ -18,6 +22,7 @@ import ArrowUpIcon from './components/icons/ArrowUpIcon';
 import ArrowDownIcon from './components/icons/ArrowDownIcon';
 import ScaleIcon from './components/icons/ScaleIcon';
 import DebtPaymentModal from './components/DebtPaymentModal';
+import LoanRepaymentModal from './components/LoanRepaymentModal';
 
 
 const CASH_METHOD_ID = 'efectivo';
@@ -220,7 +225,25 @@ const App: React.FC = () => {
 
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     const savedProfiles = localStorage.getItem('profiles');
-    if (savedProfiles) return JSON.parse(savedProfiles);
+    if (savedProfiles) {
+        const parsedProfiles: Profile[] = JSON.parse(savedProfiles);
+        // Add originalAmount to liabilities and loans if it's missing for backwards compatibility
+        const migratedProfiles = parsedProfiles.map((p: Profile) => ({
+            ...p,
+            data: {
+                ...p.data,
+                liabilities: (p.data.liabilities || []).map((l: Liability) => ({
+                    ...l,
+                    originalAmount: (l as any).originalAmount || l.amount
+                })),
+                loans: (p.data.loans || []).map((l: Loan) => ({
+                    ...l,
+                    originalAmount: (l as any).originalAmount || l.amount
+                })),
+            }
+        }));
+        return migratedProfiles;
+    }
 
     const legacyTransactions = localStorage.getItem('transactions');
     if (legacyTransactions) { // Migration logic for existing users
@@ -285,6 +308,7 @@ const App: React.FC = () => {
   const [isFixedExpenseModalOpen, setIsFixedExpenseModalOpen] = useState(false);
   const [isAssetLiabilityModalOpen, setIsAssetLiabilityModalOpen] = useState(false);
   const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
+  const [isLoanRepaymentModalOpen, setIsLoanRepaymentModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability' | 'loan' } | null>(null);
 
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -431,31 +455,6 @@ const App: React.FC = () => {
     setTransferDirection(null);
     setCurrentPage('resumen');
 }, [activeProfile]);
-
-  const handleUpdateTransaction = useCallback((id: string, newDescription: string, newAmount: number): string | void => {
-    if (!activeProfile) return "No se encontró un perfil activo.";
-
-    const transactionToUpdate = activeProfile.data.transactions.find(t => t.id === id);
-    if (!transactionToUpdate) return "No se encontró la transacción.";
-    
-    if (transactionToUpdate.transferId || transactionToUpdate.patrimonioId) {
-        return "Las transferencias y los movimientos de patrimonio no se pueden editar directamente.";
-    }
-
-    const updatedTransactions = activeProfile.data.transactions.map(t =>
-        t.id === id ? { ...t, description: newDescription, amount: newAmount } : t
-    );
-
-    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
-    if (validationError) {
-        return validationError;
-    }
-    
-    updateActiveProfileData(data => ({
-        ...data,
-        transactions: updatedTransactions
-    }));
-  }, [activeProfile]);
 
   const handleDeleteTransaction = useCallback((id: string) => {
     if (!activeProfile) return;
@@ -615,7 +614,7 @@ const App: React.FC = () => {
   }, [activeProfile, balancesByMethod]);
 
   const handleSaveLiability = useCallback((name: string, amount: number, date: string) => {
-    const newLiability: Liability = { id: crypto.randomUUID(), name, amount, date };
+    const newLiability: Liability = { id: crypto.randomUUID(), name, amount, originalAmount: amount, date };
     updateActiveProfileData(data => ({ ...data, liabilities: [...(data.liabilities || []), newLiability] }));
     setIsAssetLiabilityModalOpen(false);
   }, []);
@@ -629,7 +628,7 @@ const App: React.FC = () => {
         return;
     }
 
-    const newLoan: Loan = { id: crypto.randomUUID(), name, amount, date, sourceMethodId };
+    const newLoan: Loan = { id: crypto.randomUUID(), name, amount, originalAmount: amount, date, sourceMethodId };
     const prestamoCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'préstamos');
     
     const newTransaction: Transaction = {
@@ -707,13 +706,10 @@ const App: React.FC = () => {
     }));
   }, [activeProfile]);
 
-  const handlePayDebts = useCallback((liabilityIds: string[], paymentMethodId: string) => {
+  const handlePayDebts = useCallback((payments: { liabilityId: string, amount: number }[], paymentMethodId: string) => {
     if (!activeProfile) return;
 
-    const liabilitiesToPay = (activeProfile.data.liabilities || []).filter(l => liabilityIds.includes(l.id));
-    if (liabilitiesToPay.length === 0) return;
-
-    const totalAmount = liabilitiesToPay.reduce((sum, l) => sum + l.amount, 0);
+    const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
     const sourceBalance = balancesByMethod[paymentMethodId] || 0;
 
     if (totalAmount > sourceBalance) {
@@ -723,21 +719,40 @@ const App: React.FC = () => {
     
     const generalCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'general');
 
-    const newTransactions: Transaction[] = liabilitiesToPay.map(liability => ({
-        id: crypto.randomUUID(),
-        description: `Pago de deuda: ${liability.name}`,
-        amount: liability.amount,
-        date: new Date().toISOString().split('T')[0],
-        type: 'expense',
-        paymentMethodId: paymentMethodId,
-        categoryId: generalCategory?.id,
-    }));
+    const newTransactions: Transaction[] = payments.map(payment => {
+        const liability = (activeProfile.data.liabilities || []).find(l => l.id === payment.liabilityId)!;
+        const isFullPayment = payment.amount >= liability.amount - 0.001;
+        return {
+            id: crypto.randomUUID(),
+            description: `${isFullPayment ? 'Liquidación de deuda' : 'Pago parcial de deuda'}: ${liability.name}`,
+            amount: payment.amount,
+            date: new Date().toISOString().split('T')[0],
+            type: 'expense' as 'expense',
+            paymentMethodId: paymentMethodId,
+            categoryId: generalCategory?.id,
+            liabilityId: payment.liabilityId,
+        };
+    });
 
     const updatedTransactions = [...newTransactions, ...activeProfile.data.transactions];
-    const updatedLiabilities = (activeProfile.data.liabilities || []).filter(l => !liabilityIds.includes(l.id));
+    
+    const paymentsMap = new Map(payments.map(p => [p.liabilityId, p.amount]));
+    
+    const updatedLiabilities = (activeProfile.data.liabilities || [])
+        .map(liability => {
+            if (paymentsMap.has(liability.id)) {
+                const paymentAmount = paymentsMap.get(liability.id)!;
+                const remaining = liability.amount - paymentAmount;
+                if (remaining > 0.001) { // Epsilon for float
+                    return { ...liability, amount: remaining };
+                }
+                return null; // Paid in full
+            }
+            return liability;
+        })
+        .filter((l): l is Liability => l !== null);
 
     const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
-
     if (validationError) {
         alert(validationError);
         return;
@@ -751,6 +766,59 @@ const App: React.FC = () => {
 
     setIsDebtPaymentModalOpen(false);
 }, [activeProfile, balancesByMethod]);
+
+const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amount: number }[], paymentMethodId: string, date: string) => {
+    if (!activeProfile) return;
+
+    const prestamoCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'préstamos');
+
+    const newTransactions: Transaction[] = payments.map(payment => {
+        const loan = (activeProfile.data.loans || []).find(l => l.id === payment.loanId)!;
+        const isFullPayment = payment.amount >= loan.amount - 0.001;
+        return {
+            id: crypto.randomUUID(),
+            description: `${isFullPayment ? 'Liquidación de préstamo' : 'Pago parcial de préstamo'}: ${loan.name}`,
+            amount: payment.amount,
+            date: date,
+            type: 'income' as 'income',
+            paymentMethodId: paymentMethodId,
+            categoryId: prestamoCategory?.id,
+            loanId: payment.loanId,
+        };
+    });
+
+    const updatedTransactions = [...newTransactions, ...activeProfile.data.transactions];
+    
+    const paymentsMap = new Map(payments.map(p => [p.loanId, p.amount]));
+    
+    const updatedLoans = (activeProfile.data.loans || [])
+        .map(loan => {
+            if (paymentsMap.has(loan.id)) {
+                const paymentAmount = paymentsMap.get(loan.id)!;
+                const remaining = loan.amount - paymentAmount;
+                if (remaining > 0.001) { // Epsilon for float
+                    return { ...loan, amount: remaining };
+                }
+                return null; // Paid in full
+            }
+            return loan;
+        })
+        .filter((l): l is Loan => l !== null);
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        transactions: updatedTransactions,
+        loans: updatedLoans,
+    }));
+
+    setIsLoanRepaymentModalOpen(false);
+}, [activeProfile]);
 
   const summaryData = useMemo(() => {
     if (!activeProfile) {
@@ -780,22 +848,29 @@ const App: React.FC = () => {
         // Exclude transfers and savings from summary calculations for clarity
         if (t.transferId || t.categoryId === ahorroCategoryId) return;
 
+        const isLoanRepayment = t.type === 'income' && !!t.loanId;
+
         // Monthly calculation
         const transactionDate = new Date(t.date);
         if (transactionDate.getMonth() === currentMonth && transactionDate.getFullYear() === currentYear) {
-            if (t.type === 'income') {
+            if (isLoanRepayment) {
+                monthlyExpenses -= t.amount;
+                monthlyExpensesByMethod[t.paymentMethodId] = (monthlyExpensesByMethod[t.paymentMethodId] || 0) - t.amount;
+            } else if (t.type === 'income') {
                 monthlyIncome += t.amount;
                 monthlyIncomeByMethod[t.paymentMethodId] = (monthlyIncomeByMethod[t.paymentMethodId] || 0) + t.amount;
-            } else {
+            } else { // expense
                 monthlyExpenses += t.amount;
                 monthlyExpensesByMethod[t.paymentMethodId] = (monthlyExpensesByMethod[t.paymentMethodId] || 0) + t.amount;
             }
         }
         
         // Total calculation
-        if (t.type === 'income') {
+        if (isLoanRepayment) {
+            totalExpenses -= t.amount;
+        } else if (t.type === 'income') {
             totalIncome += t.amount;
-        } else {
+        } else { // expense
             totalExpenses += t.amount;
         }
     });
@@ -928,8 +1003,14 @@ const App: React.FC = () => {
             data: {
                 ...p.data,
                 assets: p.data.assets || [],
-                liabilities: p.data.liabilities || [],
-                loans: p.data.loans || [],
+                liabilities: (p.data.liabilities || []).map((l: Liability) => ({
+                    ...l,
+                    originalAmount: (l as any).originalAmount || l.amount
+                })),
+                loans: (p.data.loans || []).map((l: Loan) => ({
+                    ...l,
+                    originalAmount: (l as any).originalAmount || l.amount
+                })),
             }
         }));
 
@@ -1021,7 +1102,6 @@ const App: React.FC = () => {
                 balance={balance} 
                 balancesByMethod={balancesByMethod}
                 onDeleteTransaction={handleDeleteTransaction}
-                onUpdateTransaction={handleUpdateTransaction}
                 onInitiateDeposit={() => handleInitiateTransfer('deposit')}
                 onInitiateWithdrawal={() => handleInitiateTransfer('withdrawal')}
                 monthlyIncome={summaryData.monthlyIncome}
@@ -1099,7 +1179,27 @@ const App: React.FC = () => {
                     onDeleteAsset={handleDeleteAsset}
                     onDeleteLiability={handleDeleteLiability}
                     onDeleteLoan={handleDeleteLoan}
+                    onNavigate={handleNavigate}
+                />
+            )}
+            {currentPage === 'prestamos' && (
+                <Loans
+                    profile={activeProfile}
+                    loans={activeProfile.data.loans || []}
+                    transactions={activeProfile.data.transactions || []}
+                    onOpenLoanRepaymentModal={() => setIsLoanRepaymentModalOpen(true)}
+                    onNavigate={handleNavigate}
+                    currency={activeProfile.currency}
+                />
+            )}
+            {currentPage === 'deudas' && (
+                <Deudas
+                    profile={activeProfile}
+                    liabilities={activeProfile.data.liabilities || []}
+                    transactions={activeProfile.data.transactions || []}
                     onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
+                    onNavigate={handleNavigate}
+                    currency={activeProfile.currency}
                 />
             )}
           </main>
@@ -1210,6 +1310,15 @@ const App: React.FC = () => {
         bankAccounts={activeProfile.data.bankAccounts || []}
         balancesByMethod={balancesByMethod}
         onPayDebts={handlePayDebts}
+        currency={activeProfile.currency}
+      />}
+      {activeProfile && <LoanRepaymentModal
+        isOpen={isLoanRepaymentModalOpen}
+        onClose={() => setIsLoanRepaymentModalOpen(false)}
+        loans={activeProfile.data.loans || []}
+        bankAccounts={activeProfile.data.bankAccounts || []}
+        balancesByMethod={balancesByMethod}
+        onReceiveLoanPayments={handleReceiveLoanPayments}
         currency={activeProfile.currency}
       />}
     </div>

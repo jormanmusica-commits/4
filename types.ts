@@ -14,7 +14,10 @@ export interface Transaction {
   categoryId?: string;
   transferId?: string;
   patrimonioId?: string;
-  patrimonioType?: 'asset' | 'loan';
+  // FIX: Widened patrimonioType to include 'debt-payment' and 'loan-repayment' to resolve intersection type issues with HistoryItemType.
+  patrimonioType?: 'asset' | 'loan' | 'debt-payment' | 'loan-repayment';
+  loanId?: string;
+  liabilityId?: string;
 }
 
 export interface Category {
@@ -43,6 +46,7 @@ export interface Liability {
   id: string;
   name: string;
   amount: number;
+  originalAmount: number;
   date: string;
 }
 
@@ -50,6 +54,7 @@ export interface Loan {
   id: string;
   name: string;
   amount: number;
+  originalAmount: number;
   date: string;
   sourceMethodId?: string;
 }
@@ -78,7 +83,7 @@ export enum Theme {
   DARK = 'dark',
 }
 
-export type Page = 'inicio' | 'resumen' | 'ajustes' | 'ingresos' | 'gastos' | 'patrimonio';
+export type Page = 'inicio' | 'resumen' | 'ajustes' | 'ingresos' | 'gastos' | 'patrimonio' | 'prestamos' | 'deudas';
 
 export type TransactionTypeFilter = 'income' | 'expense' | 'transfer' | 'saving' | 'loan';
 export type PaymentMethodFilter = 'cash' | 'bank';
@@ -89,9 +94,17 @@ export interface Filters {
   types: TransactionTypeFilter[];
   methods: PaymentMethodFilter[];
   bankAccounts: string[];
+  categories: string[];
 }
 
 export interface PatrimonioFilters {
-  types: ('asset' | 'loan' | 'liability')[];
+  // FIX: Widened the `types` array to include all possible values from `HistoryItemType['patrimonioType']` to fix cascading type errors.
+  types: ('asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment')[];
   sources: string[];
 }
+
+export type HistoryItemType = (Asset & { patrimonioType: 'asset', amount: number, sourceDetails?: { name: string, color: string } }) |
+                       (Liability & { patrimonioType: 'liability', amount: number }) |
+                       (Loan & { patrimonioType: 'loan', amount: number, sourceDetails?: { name: string, color: string } }) |
+                       (Transaction & { patrimonioType: 'debt-payment', name: string }) |
+                       (Transaction & { patrimonioType: 'loan-repayment', name: string });
