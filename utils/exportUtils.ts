@@ -80,7 +80,8 @@ export const exportProfileToCsv = (payload: ExportPayload): string => {
 
   const { transactions, bankAccounts, fixedExpenses, assets, liabilities, loans } = profile.data;
   
-  const bankAccountMap = new Map(bankAccounts.map(b => [b.id, b.name]));
+  // FIX: Explicitly typed `bankAccountMap` to help TypeScript infer the correct types and prevent `Map.get()` from returning `unknown`.
+  const bankAccountMap: Map<string, string> = new Map(bankAccounts.map(b => [b.id, b.name]));
   const getPaymentMethodName = (id?: string): string => {
     if (!id) return 'N/A (Movimiento Inicial)';
     if (id === CASH_METHOD_ID) return 'Efectivo';

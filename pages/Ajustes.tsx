@@ -6,6 +6,7 @@ import BankAccountModal from '../components/BankAccountModal';
 import ExportIcon from '../components/icons/ExportIcon';
 import ArchiveIcon from '../components/icons/ArchiveIcon';
 import ImportIcon from '../components/icons/ImportIcon';
+import WarningIcon from '../components/icons/WarningIcon';
 
 interface AjustesProps {
   theme: Theme;
@@ -58,6 +59,22 @@ const Ajustes: React.FC<AjustesProps> = ({
         <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6 text-center">
           Ajustes
         </h2>
+
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 text-amber-800 dark:text-amber-300 p-4 rounded-r-lg mb-6" role="alert">
+          <div className="flex">
+            <div className="py-1">
+              <WarningIcon className="w-6 h-6 text-amber-500 mr-4" />
+            </div>
+            <div>
+              <p className="font-bold">Aviso para usuarios de Safari</p>
+              <p className="text-sm">
+                Al eliminar el historial en Safari, es posible que se borren todos los datos de esta aplicación. 
+                Para evitar la pérdida de datos, te recomendamos <strong>exportar tus datos regularmente</strong> usando la opción "Exportar Todo (JSON)".
+              </p>
+            </div>
+          </div>
+        </div>
+        
         <div className="space-y-6">
           <div>
             <h3 className="text-lg font-semibold text-gray-600 dark:text-gray-400 mb-2">Apariencia</h3>
