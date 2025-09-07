@@ -1,5 +1,8 @@
 
 
+
+
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability, Loan } from './types';
 import Inicio from './pages/Inicio';
@@ -573,8 +576,18 @@ const App: React.FC = () => {
     return { balance: totalBalance, balancesByMethod: balances };
   }, [activeProfile]);
 
-  const handleCreateSaving = useCallback((value: number, sourceMethodId: string, date: string) => {
+  const handleCreateSaving = useCallback((value: number, sourceMethodId: string, date: string, isInitial: boolean) => {
     if (!activeProfile) return;
+
+    if (isInitial) {
+        const newAsset: Asset = { id: crypto.randomUUID(), name: 'Ahorro', value, date, sourceMethodId: undefined };
+        updateActiveProfileData(data => ({
+            ...data,
+            assets: [...(data.assets || []), newAsset],
+        }));
+        setIsAssetLiabilityModalOpen(false);
+        return;
+    }
 
     const sourceBalance = balancesByMethod[sourceMethodId] || 0;
     if (value > sourceBalance) {
@@ -619,8 +632,18 @@ const App: React.FC = () => {
     setIsAssetLiabilityModalOpen(false);
   }, []);
 
-  const handleSaveLoan = useCallback((name: string, amount: number, sourceMethodId: string, date: string) => {
+  const handleSaveLoan = useCallback((name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean) => {
     if (!activeProfile) return;
+
+    if (isInitial) {
+        const newLoan: Loan = { id: crypto.randomUUID(), name, amount, originalAmount: amount, date, sourceMethodId: undefined };
+        updateActiveProfileData(data => ({
+            ...data,
+            loans: [...(data.loans || []), newLoan],
+        }));
+        setIsAssetLiabilityModalOpen(false);
+        return;
+    }
 
     const sourceBalance = balancesByMethod[sourceMethodId] || 0;
     if (amount > sourceBalance) {
@@ -848,15 +871,10 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         // Exclude transfers and savings from summary calculations for clarity
         if (t.transferId || t.categoryId === ahorroCategoryId) return;
 
-        const isLoanRepayment = t.type === 'income' && !!t.loanId;
-
         // Monthly calculation
         const transactionDate = new Date(t.date);
         if (transactionDate.getMonth() === currentMonth && transactionDate.getFullYear() === currentYear) {
-            if (isLoanRepayment) {
-                monthlyExpenses -= t.amount;
-                monthlyExpensesByMethod[t.paymentMethodId] = (monthlyExpensesByMethod[t.paymentMethodId] || 0) - t.amount;
-            } else if (t.type === 'income') {
+            if (t.type === 'income') {
                 monthlyIncome += t.amount;
                 monthlyIncomeByMethod[t.paymentMethodId] = (monthlyIncomeByMethod[t.paymentMethodId] || 0) + t.amount;
             } else { // expense
@@ -866,9 +884,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         }
         
         // Total calculation
-        if (isLoanRepayment) {
-            totalExpenses -= t.amount;
-        } else if (t.type === 'income') {
+        if (t.type === 'income') {
             totalIncome += t.amount;
         } else { // expense
             totalExpenses += t.amount;
@@ -1239,14 +1255,12 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                     icon: <ArrowUpIcon className="w-6 h-6" />,
                     onClick: () => openAssetLiabilityModal('asset'),
                     color: '#22c55e',
-                    disabled: balance <= 0
                 },
                 {
                     label: 'Añadir Préstamo',
                     icon: <ScaleIcon className="w-6 h-6" />,
                     onClick: () => openAssetLiabilityModal('loan'),
                     color: '#3b82f6',
-                    disabled: balance <= 0
                 },
                 {
                     label: 'Añadir Deuda',
