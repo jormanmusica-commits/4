@@ -15,9 +15,10 @@ export interface Transaction {
   transferId?: string;
   patrimonioId?: string;
   // FIX: Widened patrimonioType to include 'debt-payment' and 'loan-repayment' to resolve intersection type issues with HistoryItemType.
-  patrimonioType?: 'asset' | 'loan' | 'debt-payment' | 'loan-repayment';
+  patrimonioType?: 'asset' | 'loan' | 'debt-payment' | 'loan-repayment' | 'loan-addition';
   loanId?: string;
   liabilityId?: string;
+  details?: string;
 }
 
 export interface Category {
@@ -53,10 +54,12 @@ export interface Liability {
 export interface Loan {
   id: string;
   name: string;
+  details?: string;
   amount: number;
   originalAmount: number;
   date: string;
   sourceMethodId?: string;
+  initialAdditions?: { amount: number; date: string; details?: string; }[];
 }
 
 export interface ProfileData {
@@ -99,7 +102,7 @@ export interface Filters {
 
 export interface PatrimonioFilters {
   // FIX: Widened the `types` array to include all possible values from `HistoryItemType['patrimonioType']` to fix cascading type errors.
-  types: ('asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment')[];
+  types: ('asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition')[];
   sources: string[];
 }
 
@@ -107,4 +110,5 @@ export type HistoryItemType = (Asset & { patrimonioType: 'asset', amount: number
                        (Liability & { patrimonioType: 'liability', amount: number }) |
                        (Loan & { patrimonioType: 'loan', amount: number, sourceDetails?: { name: string, color: string } }) |
                        (Transaction & { patrimonioType: 'debt-payment', name: string }) |
-                       (Transaction & { patrimonioType: 'loan-repayment', name: string });
+                       (Transaction & { patrimonioType: 'loan-repayment', name: string }) |
+                       (Transaction & { patrimonioType: 'loan-addition', name: string });

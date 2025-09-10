@@ -10,7 +10,7 @@ interface AssetLiabilityModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSaveLiability: (name: string, amount: number, date: string) => void;
-    onSaveLoan: (name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean) => void;
+    onSaveLoan: (name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean, details: string) => void;
     onCreateSaving: (value: number, sourceMethodId: string, date: string, isInitial: boolean) => void;
     config: {
         type: 'asset' | 'liability' | 'loan';
@@ -25,6 +25,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
 }) => {
     const { type } = config;
     const [name, setName] = useState('');
+    const [details, setDetails] = useState('');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [sourceMethodId, setSourceMethodId] = useState<string>(CASH_METHOD_ID);
@@ -38,6 +39,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
     useEffect(() => {
         if (isOpen) {
             setName('');
+            setDetails('');
             setAmount('');
             setDate(new Date().toISOString().split('T')[0]);
             setIsInitial(false);
@@ -101,7 +103,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
         if (isAsset) {
             onCreateSaving(numericAmount, isInitial ? '' : sourceMethodId, date, isInitial);
         } else if (isLoan) {
-            onSaveLoan(name, numericAmount, isInitial ? '' : sourceMethodId, date, isInitial);
+            onSaveLoan(name, numericAmount, isInitial ? '' : sourceMethodId, date, isInitial, details);
         } else {
             onSaveLiability(name, numericAmount, date);
         }
@@ -168,7 +170,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                     {!isAsset && (
                          <div>
                             <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Descripción
+                                {isLoan ? "Título" : "Descripción"}
                             </label>
                             <input
                                 ref={descriptionInputRef}
@@ -176,7 +178,22 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                                 id="item-name"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                placeholder={isLoan ? "Ej: Préstamo a Juan" : "Ej: Préstamo Coche"}
+                                placeholder={isLoan ? "Ej: Préstamo a Juan Pérez" : "Ej: Préstamo Coche"}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                            />
+                        </div>
+                    )}
+                    {isLoan && (
+                        <div>
+                            <label htmlFor="item-details" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Detalles (Opcional)
+                            </label>
+                            <textarea
+                                id="item-details"
+                                value={details}
+                                onChange={(e) => setDetails(e.target.value)}
+                                placeholder="Ej: Para la entrada del coche"
+                                rows={3}
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
                             />
                         </div>

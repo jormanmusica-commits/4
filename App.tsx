@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Theme, Transaction, Page, Category, BankAccount, FixedExpense, Profile, ProfileData, Asset, Liability, Loan } from './types';
 import Inicio from './pages/Inicio';
@@ -27,6 +21,8 @@ import ArrowDownIcon from './components/icons/ArrowDownIcon';
 import ScaleIcon from './components/icons/ScaleIcon';
 import DebtPaymentModal from './components/DebtPaymentModal';
 import LoanRepaymentModal from './components/LoanRepaymentModal';
+import AddValueToLoanModal from './components/AddValueToLoanModal';
+import EditLoanModal from './components/EditLoanModal';
 
 
 const CASH_METHOD_ID = 'efectivo';
@@ -242,7 +238,8 @@ const App: React.FC = () => {
                 })),
                 loans: (p.data.loans || []).map((l: Loan) => ({
                     ...l,
-                    originalAmount: (l as any).originalAmount || l.amount
+                    originalAmount: (l as any).originalAmount || l.amount,
+                    initialAdditions: (l as any).initialAdditions || [],
                 })),
             }
         }));
@@ -313,6 +310,8 @@ const App: React.FC = () => {
   const [isAssetLiabilityModalOpen, setIsAssetLiabilityModalOpen] = useState(false);
   const [payingDebt, setPayingDebt] = useState<Liability | null>(null);
   const [repayingLoan, setRepayingLoan] = useState<Loan | null>(null);
+  const [addingValueToLoan, setAddingValueToLoan] = useState<Loan | null>(null);
+  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
   const [modalConfig, setModalConfig] = useState<{ type: 'asset' | 'liability' | 'loan' } | null>(null);
 
   const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
@@ -466,50 +465,94 @@ const App: React.FC = () => {
     const transactionToDelete = activeProfile.data.transactions.find(t => t.id === id);
     if (!transactionToDelete) return;
 
+    // Build the initial set of changes
+    let transactionsToRemoveIds = [id];
+    let updatedAssets = [...(activeProfile.data.assets || [])];
+    let updatedLoans = [...(activeProfile.data.loans || [])];
+    let updatedLiabilities = [...(activeProfile.data.liabilities || [])];
+
+    // Determine confirmation message type
     const isTransfer = !!transactionToDelete.transferId;
-    const isPatrimonio = !!transactionToDelete.patrimonioId;
+    const isPatrimonioCreation = !!transactionToDelete.patrimonioId && (transactionToDelete.patrimonioType === 'asset' || transactionToDelete.patrimonioType === 'loan');
+    const isDebtPayment = !!transactionToDelete.liabilityId;
+    const isLoanRepayment = !!transactionToDelete.loanId;
+    const isLoanAddition = transactionToDelete.patrimonioType === 'loan-addition';
+    
     let confirmMessage = `¿Estás seguro de que quieres eliminar esta transacción?`;
     if (isTransfer) {
         confirmMessage = `Esta es una transferencia. ¿Estás seguro de que quieres eliminar ambas partes de la transacción?`;
-    } else if (isPatrimonio) {
+    } else if (isPatrimonioCreation) {
         const typeText = transactionToDelete.patrimonioType === 'asset' ? 'el ahorro' : 'el préstamo';
         confirmMessage = `Esta transacción está vinculada a un movimiento de patrimonio. Eliminarla también eliminará ${typeText} asociado. ¿Estás seguro?`;
+    } else if (isLoanAddition) {
+        confirmMessage = `Esta es una ampliación de un préstamo. Eliminarlo revertirá el monto en el préstamo asociado. ¿Estás seguro?`;
+    } else if (isDebtPayment || isLoanRepayment) {
+        confirmMessage = `Este es un pago. Eliminarlo revertirá el monto en la deuda/préstamo asociado. ¿Estás seguro?`;
     }
     
     if (!window.confirm(confirmMessage)) {
         return;
     }
 
-    let transactionsToRemoveIds = [id];
-    let updatedAssets = activeProfile.data.assets;
-    let updatedLoans = activeProfile.data.loans;
-
-    if (transactionToDelete.patrimonioId && transactionToDelete.patrimonioType) {
-        if (transactionToDelete.patrimonioType === 'asset') {
-            updatedAssets = (activeProfile.data.assets || []).filter(item => item.id !== transactionToDelete.patrimonioId);
-        } else if (transactionToDelete.patrimonioType === 'loan') {
-            updatedLoans = (activeProfile.data.loans || []).filter(item => item.id !== transactionToDelete.patrimonioId);
-        }
-    }
-
-    if (transactionToDelete.transferId) {
+    // Prepare state changes based on transaction type
+    if (isTransfer) {
         const otherPartOfTransfer = activeProfile.data.transactions.find(t => t.transferId === transactionToDelete.transferId && t.id !== id);
         if (otherPartOfTransfer) transactionsToRemoveIds.push(otherPartOfTransfer.id);
+    } 
+    else if (isPatrimonioCreation) {
+        if (transactionToDelete.patrimonioType === 'asset') {
+            updatedAssets = updatedAssets.filter(item => item.id !== transactionToDelete.patrimonioId);
+        } else if (transactionToDelete.patrimonioType === 'loan') {
+            updatedLoans = updatedLoans.filter(item => item.id !== transactionToDelete.patrimonioId);
+        }
+    }
+    else if (isLoanAddition) {
+        const loanToUpdate = updatedLoans.find(l => l.id === transactionToDelete.patrimonioId);
+        if (loanToUpdate) {
+            updatedLoans = updatedLoans.map(l => 
+                l.id === transactionToDelete.patrimonioId 
+                ? { ...l, amount: l.amount - transactionToDelete.amount, originalAmount: l.originalAmount - transactionToDelete.amount }
+                : l
+            );
+        }
+    }
+    else if (isDebtPayment) {
+        const liabilityToUpdate = updatedLiabilities.find(l => l.id === transactionToDelete.liabilityId);
+        if (liabilityToUpdate) {
+            updatedLiabilities = updatedLiabilities.map(l => 
+                l.id === transactionToDelete.liabilityId 
+                ? { ...l, amount: l.amount + transactionToDelete.amount }
+                : l
+            );
+        }
+    }
+    else if (isLoanRepayment) {
+        const loanToUpdate = updatedLoans.find(l => l.id === transactionToDelete.loanId);
+        if (loanToUpdate) {
+            updatedLoans = updatedLoans.map(l => 
+                l.id === transactionToDelete.loanId 
+                ? { ...l, amount: l.amount + transactionToDelete.amount }
+                : l
+            );
+        }
     }
     
     const updatedTransactions = activeProfile.data.transactions.filter(t => !transactionsToRemoveIds.includes(t.id));
 
+    // Validate the transaction change first
     const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
     if (validationError) {
         alert(validationError + "\nNo se puede eliminar esta transacción.");
         return;
     }
     
+    // If validation passes, commit all state changes
     updateActiveProfileData(data => ({
         ...data,
         transactions: updatedTransactions,
         assets: updatedAssets,
         loans: updatedLoans,
+        liabilities: updatedLiabilities,
     }));
   }, [activeProfile]);
 
@@ -633,11 +676,11 @@ const App: React.FC = () => {
     setIsAssetLiabilityModalOpen(false);
   }, []);
 
-  const handleSaveLoan = useCallback((name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean) => {
+  const handleSaveLoan = useCallback((name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean, details: string) => {
     if (!activeProfile) return;
 
     if (isInitial) {
-        const newLoan: Loan = { id: crypto.randomUUID(), name, amount, originalAmount: amount, date, sourceMethodId: undefined };
+        const newLoan: Loan = { id: crypto.randomUUID(), name, details, amount, originalAmount: amount, date, sourceMethodId: undefined, initialAdditions: [] };
         updateActiveProfileData(data => ({
             ...data,
             loans: [...(data.loans || []), newLoan],
@@ -652,7 +695,7 @@ const App: React.FC = () => {
         return;
     }
 
-    const newLoan: Loan = { id: crypto.randomUUID(), name, amount, originalAmount: amount, date, sourceMethodId };
+    const newLoan: Loan = { id: crypto.randomUUID(), name, details, amount, originalAmount: amount, date, sourceMethodId, initialAdditions: [] };
     const prestamoCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'préstamos');
     
     const newTransaction: Transaction = {
@@ -682,6 +725,87 @@ const App: React.FC = () => {
     }));
 
     setIsAssetLiabilityModalOpen(false);
+  }, [activeProfile, balancesByMethod]);
+
+  const handleUpdateLoanDetails = useCallback((loanId: string, name: string, details: string) => {
+      updateActiveProfileData(data => ({
+          ...data,
+          loans: (data.loans || []).map(l =>
+              l.id === loanId ? { ...l, name, details } : l
+          ),
+      }));
+      setEditingLoan(null);
+  }, []);
+
+  const handleAddValueToLoan = useCallback((loanId: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean, details: string) => {
+    if (!activeProfile) return;
+
+    const loanToUpdate = (activeProfile.data.loans || []).find(l => l.id === loanId);
+    if (!loanToUpdate) return;
+
+    if (isInitial) {
+        updateActiveProfileData(data => ({
+            ...data,
+            loans: (data.loans || []).map(l => {
+                if (l.id === loanId) {
+                    const newAddition = { amount, date, details };
+                    return {
+                        ...l,
+                        amount: l.amount + amount,
+                        originalAmount: l.originalAmount + amount,
+                        initialAdditions: [...(l.initialAdditions || []), newAddition],
+                    };
+                }
+                return l;
+            }),
+        }));
+        setAddingValueToLoan(null);
+        return;
+    }
+
+    // --- Logic for non-initial movement ---
+    const sourceBalance = balancesByMethod[sourceMethodId] || 0;
+    if (amount > sourceBalance) {
+        alert("Fondos insuficientes en la cuenta de origen.");
+        return;
+    }
+
+    const prestamoCategory = activeProfile.data.categories.find(c => c.name.toLowerCase() === 'préstamos');
+
+    const newTransaction: Transaction = {
+        id: crypto.randomUUID(),
+        description: `Ampliación préstamo: ${loanToUpdate.name}`,
+        amount: amount,
+        date: date,
+        type: 'expense',
+        paymentMethodId: sourceMethodId,
+        categoryId: prestamoCategory?.id,
+        patrimonioId: loanId,
+        patrimonioType: 'loan-addition',
+        details,
+    };
+    
+    const updatedLoans = (activeProfile.data.loans || []).map(l =>
+        l.id === loanId
+        ? { ...l, amount: l.amount + amount, originalAmount: l.originalAmount + amount }
+        : l
+    );
+
+    const updatedTransactions = [newTransaction, ...activeProfile.data.transactions];
+
+    const validationError = validateTransactionChange(updatedTransactions, activeProfile.data.bankAccounts);
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    updateActiveProfileData(data => ({
+        ...data,
+        transactions: updatedTransactions,
+        loans: updatedLoans,
+    }));
+
+    setAddingValueToLoan(null);
   }, [activeProfile, balancesByMethod]);
 
   const handleDeleteAsset = useCallback((id: string) => {
@@ -881,7 +1005,7 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         }
 
         // Monthly Summary Calculation (exclude transfers, savings creations, loan creations)
-        if (t.transferId || t.patrimonioType === 'asset' || t.patrimonioType === 'loan') {
+        if (t.transferId || t.patrimonioType === 'asset' || t.patrimonioType === 'loan' || t.patrimonioType === 'loan-addition') {
             return;
         }
 
@@ -1030,7 +1154,8 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                 })),
                 loans: (p.data.loans || []).map((l: Loan) => ({
                     ...l,
-                    originalAmount: (l as any).originalAmount || l.amount
+                    originalAmount: (l as any).originalAmount || l.amount,
+                    initialAdditions: (l as any).initialAdditions || [],
                 })),
             }
         }));
@@ -1209,6 +1334,8 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
                     loans={activeProfile.data.loans || []}
                     transactions={activeProfile.data.transactions || []}
                     onOpenLoanRepaymentModal={(loan) => setRepayingLoan(loan)}
+                    onOpenAddValueToLoanModal={(loan) => setAddingValueToLoan(loan)}
+                    onOpenEditLoanModal={(loan) => setEditingLoan(loan)}
                     onNavigate={handleNavigate}
                     currency={activeProfile.currency}
                 />
@@ -1339,6 +1466,21 @@ const handleReceiveLoanPayments = useCallback((payments: { loanId: string, amoun
         balancesByMethod={balancesByMethod}
         onReceiveLoanPayments={handleReceiveLoanPayments}
         currency={activeProfile.currency}
+      />}
+      {activeProfile && <AddValueToLoanModal
+        isOpen={!!addingValueToLoan}
+        onClose={() => setAddingValueToLoan(null)}
+        loan={addingValueToLoan}
+        bankAccounts={activeProfile.data.bankAccounts || []}
+        balancesByMethod={balancesByMethod}
+        onAddValue={handleAddValueToLoan}
+        currency={activeProfile.currency}
+      />}
+      {activeProfile && <EditLoanModal
+          isOpen={!!editingLoan}
+          onClose={() => setEditingLoan(null)}
+          loan={editingLoan}
+          onUpdateLoan={handleUpdateLoanDetails}
       />}
     </div>
   );

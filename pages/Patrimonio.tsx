@@ -77,6 +77,14 @@ const HistoryItem: React.FC<{
                 typeLabel: 'Reembolso Préstamo',
                 sign: '+'
             };
+            case 'loan-addition': return {
+                icon: <ArrowUpIcon className="w-5 h-5 text-blue-500" />,
+                bgColorClass: 'bg-blue-500/10',
+                textColorClass: 'text-blue-500',
+                displayName: name,
+                typeLabel: 'Ampliación Préstamo',
+                sign: '-'
+            };
         }
     }, [patrimonioType, name]);
     
@@ -202,7 +210,7 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
         // to ensure they appear after creations on the same day when sorted descending.
         profile.data.transactions.forEach(t => {
             // Only consider transactions that are part of the patrimonio history
-            if (t.liabilityId || t.loanId) {
+            if (t.liabilityId || t.loanId || (t.patrimonioType === 'loan-addition' && t.patrimonioId)) {
                 const paymentTimestamp = new Date(t.date + 'T12:00:00Z').getTime();
 
                 if (t.liabilityId) {
@@ -221,6 +229,14 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
                         timestamp: paymentTimestamp,
                         patrimonioType: 'loan-repayment',
                         name: `Reembolso: ${loanName}`,
+                    });
+                }
+                if (t.patrimonioType === 'loan-addition') {
+                    combined.push({
+                        ...t,
+                        timestamp: paymentTimestamp,
+                        patrimonioType: 'loan-addition',
+                        name: t.description,
                     });
                 }
             }
