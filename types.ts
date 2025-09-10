@@ -15,7 +15,7 @@ export interface Transaction {
   transferId?: string;
   patrimonioId?: string;
   // FIX: Widened patrimonioType to include 'debt-payment' and 'loan-repayment' to resolve intersection type issues with HistoryItemType.
-  patrimonioType?: 'asset' | 'loan' | 'debt-payment' | 'loan-repayment' | 'loan-addition';
+  patrimonioType?: 'asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition' | 'debt-addition';
   loanId?: string;
   liabilityId?: string;
   details?: string;
@@ -46,9 +46,12 @@ export interface Asset {
 export interface Liability {
   id: string;
   name: string;
+  details?: string;
   amount: number;
   originalAmount: number;
   date: string;
+  destinationMethodId?: string;
+  initialAdditions?: { id: string; amount: number; date: string; details?: string; }[];
 }
 
 export interface Loan {
@@ -59,7 +62,7 @@ export interface Loan {
   originalAmount: number;
   date: string;
   sourceMethodId?: string;
-  initialAdditions?: { amount: number; date: string; details?: string; }[];
+  initialAdditions?: { id: string; amount: number; date: string; details?: string; }[];
 }
 
 export interface ProfileData {
@@ -102,13 +105,15 @@ export interface Filters {
 
 export interface PatrimonioFilters {
   // FIX: Widened the `types` array to include all possible values from `HistoryItemType['patrimonioType']` to fix cascading type errors.
-  types: ('asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition')[];
+  types: ('asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition' | 'debt-addition')[];
   sources: string[];
 }
 
+// FIX: Added `sourceDetails` to `liability` and `debt-addition` types to match usage in `Patrimonio.tsx`.
 export type HistoryItemType = (Asset & { patrimonioType: 'asset', amount: number, sourceDetails?: { name: string, color: string } }) |
-                       (Liability & { patrimonioType: 'liability', amount: number }) |
+                       (Liability & { patrimonioType: 'liability', amount: number, sourceDetails?: { name: string, color: string } }) |
                        (Loan & { patrimonioType: 'loan', amount: number, sourceDetails?: { name: string, color: string } }) |
                        (Transaction & { patrimonioType: 'debt-payment', name: string }) |
                        (Transaction & { patrimonioType: 'loan-repayment', name: string }) |
-                       (Transaction & { patrimonioType: 'loan-addition', name: string });
+                       (Transaction & { patrimonioType: 'loan-addition', name: string }) |
+                       (Transaction & { patrimonioType: 'debt-addition', name: string, sourceDetails?: { name: string, color: string } });

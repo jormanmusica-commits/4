@@ -47,13 +47,14 @@ const PatrimonioFilterPanel: React.FC<PatrimonioFilterPanelProps> = ({ isOpen, o
   };
 
   // FIX: Added 'debt-payment' and 'loan-repayment' to the filter options to align with the updated `PatrimonioFilters` type.
-  const typeOptions: { value: 'asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition', label: string }[] = [
+  const typeOptions: { value: 'asset' | 'loan' | 'liability' | 'debt-payment' | 'loan-repayment' | 'loan-addition' | 'debt-addition', label: string }[] = [
     { value: 'asset', label: 'Ahorros' },
     { value: 'loan', label: 'Préstamos (Creación)' },
     { value: 'liability', label: 'Deudas' },
     { value: 'debt-payment', label: 'Pagos de Deudas' },
     { value: 'loan-repayment', label: 'Reembolsos Préstamo' },
     { value: 'loan-addition', label: 'Ampliación Préstamo' },
+    { value: 'debt-addition', label: 'Ampliación Deuda' },
   ];
 
   const sourceOptions = [

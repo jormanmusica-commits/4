@@ -9,7 +9,7 @@ const CASH_METHOD_ID = 'efectivo';
 interface AssetLiabilityModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSaveLiability: (name: string, amount: number, date: string) => void;
+    onSaveLiability: (name: string, details: string, amount: number, destinationMethodId: string, date: string, isInitial: boolean) => void;
     onSaveLoan: (name: string, amount: number, sourceMethodId: string, date: string, isInitial: boolean, details: string) => void;
     onCreateSaving: (value: number, sourceMethodId: string, date: string, isInitial: boolean) => void;
     config: {
@@ -35,6 +35,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
 
     const isAsset = type === 'asset';
     const isLoan = type === 'loan';
+    const isLiability = type === 'liability';
 
     useEffect(() => {
         if (isOpen) {
@@ -43,9 +44,9 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
             setAmount('');
             setDate(new Date().toISOString().split('T')[0]);
             setIsInitial(false);
-            if (isAsset || isLoan) {
+            if (isAsset || isLoan || isLiability) {
                 const cashBalance = balancesByMethod[CASH_METHOD_ID] || 0;
-                if (cashBalance > 0) {
+                if (cashBalance >= 0) { // Can be 0 for receiving money
                     setSourceMethodId(CASH_METHOD_ID);
                 } else {
                     setSourceMethodId(bankAccounts.find(b => (balancesByMethod[b.id] || 0) > 0)?.id || CASH_METHOD_ID);
@@ -53,7 +54,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
             }
             setError('');
         }
-    }, [isOpen, isAsset, isLoan, balancesByMethod, bankAccounts]);
+    }, [isOpen, isAsset, isLoan, isLiability, balancesByMethod, bankAccounts]);
 
     const sources = useMemo(() => [
         { id: CASH_METHOD_ID, name: 'Efectivo', balance: balancesByMethod[CASH_METHOD_ID] || 0, color: '#008f39' },
@@ -74,28 +75,24 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
     if (!isOpen) return null;
 
     const handleSubmit = () => {
-        const numericAmount = parseFloat(amount.replace(',', '.'));
+        const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
         
         if (!isAsset && !name.trim()) {
             setError('La descripción es obligatoria.');
-            return;
-        }
-        if (!amount.trim()) {
-            setError('El monto es obligatorio.');
             return;
         }
         if (!date) {
             setError('La fecha es obligatoria.');
             return;
         }
-        if (isNaN(numericAmount) || numericAmount <= 0) {
-            setError('Por favor, introduce una cantidad válida.');
+        if (numericAmount < 0) {
+            setError('La cantidad no puede ser negativa.');
             return;
         }
         
         if (!isInitial && (isAsset || isLoan)) {
-            if (!sourceMethodId) {
-                setError('Debes seleccionar un origen para los fondos.');
+             if (numericAmount > 0 && !sourceMethodId) {
+                setError('Debes seleccionar una cuenta.');
                 return;
             }
         }
@@ -105,7 +102,8 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
         } else if (isLoan) {
             onSaveLoan(name, numericAmount, isInitial ? '' : sourceMethodId, date, isInitial, details);
         } else {
-            onSaveLiability(name, numericAmount, date);
+            // For liabilities, always treat as initial. No source/destination method is needed.
+            onSaveLiability(name, details, numericAmount, '', date, true);
         }
     };
 
@@ -157,59 +155,85 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                 </header>
 
                 <div className="p-6 space-y-4">
-                     {/* COMMON FIELDS */}
-                    <AmountInput
-                        value={amount}
-                        onChange={setAmount}
-                        label={modalConfig.amountLabel}
-                        themeColor={modalConfig.themeColor}
-                        currency={currency}
-                        autoFocus={true}
-                        onSubmitted={() => !isAsset && descriptionInputRef.current?.focus()}
-                    />
-                    {!isAsset && (
-                         <div>
-                            <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                {isLoan ? "Título" : "Descripción"}
-                            </label>
-                            <input
-                                ref={descriptionInputRef}
-                                type="text"
-                                id="item-name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder={isLoan ? "Ej: Préstamo a Juan Pérez" : "Ej: Préstamo Coche"}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
-                            />
-                        </div>
-                    )}
-                    {isLoan && (
-                        <div>
-                            <label htmlFor="item-details" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Detalles (Opcional)
-                            </label>
-                            <textarea
-                                id="item-details"
-                                value={details}
-                                onChange={(e) => setDetails(e.target.value)}
-                                placeholder="Ej: Para la entrada del coche"
-                                rows={3}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
-                            />
-                        </div>
-                    )}
-                     <div>
-                        <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Fecha
-                        </label>
-                        <CustomDatePicker
-                            value={date}
-                            onChange={setDate}
-                            themeColor={modalConfig.themeColor}
-                        />
-                    </div>
+                    {/* REORDERED FORM FOR LOAN & LIABILITY */}
+                    { isLoan || isLiability ? (
+                        <>
+                            <div>
+                                <label htmlFor="item-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    {isLoan ? "Título" : "Descripción"}
+                                </label>
+                                <input
+                                    ref={descriptionInputRef}
+                                    type="text"
+                                    id="item-name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder={isLoan ? "Ej: Préstamo a Juan Pérez" : "Ej: Préstamo Coche"}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                />
+                            </div>
 
-                    {/* INITIAL MOVEMENT CHECKBOX */}
+                             <div>
+                                <label htmlFor="item-details" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Detalles (Opcional)
+                                </label>
+                                <textarea
+                                    id="item-details"
+                                    value={details}
+                                    onChange={(e) => setDetails(e.target.value)}
+                                    placeholder={isLoan ? "Ej: Para la entrada del coche" : "Ej: Cuotas, intereses, etc."}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+                                />
+                            </div>
+
+                            <AmountInput
+                                value={amount}
+                                onChange={setAmount}
+                                label={modalConfig.amountLabel}
+                                themeColor={modalConfig.themeColor}
+                                currency={currency}
+                                onSubmitted={() => {}}
+                            />
+
+                            <div>
+                                <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Fecha
+                                </label>
+                                <CustomDatePicker
+                                    value={date}
+                                    onChange={setDate}
+                                    themeColor={modalConfig.themeColor}
+                                    displayMode="modal"
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {/* ORIGINAL ORDER FOR ASSET */}
+                            <AmountInput
+                                value={amount}
+                                onChange={setAmount}
+                                label={modalConfig.amountLabel}
+                                themeColor={modalConfig.themeColor}
+                                currency={currency}
+                                autoFocus={true}
+                                onSubmitted={() => !isAsset && descriptionInputRef.current?.focus()}
+                            />
+                             <div>
+                                <label htmlFor="item-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Fecha
+                                </label>
+                                <CustomDatePicker
+                                    value={date}
+                                    onChange={setDate}
+                                    themeColor={modalConfig.themeColor}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* COMMON FIELDS for ASSET, LOAN */}
                     {(isAsset || isLoan) && (
                         <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 pt-2">
                             <input
@@ -225,12 +249,10 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                             </label>
                         </div>
                     )}
-
-                    {/* SOURCE OF FUNDS */}
                     {(isAsset || isLoan) && !isInitial && (
                         <div className="animate-fade-in">
                             <label htmlFor="source-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Origen de los fondos
+                                {isLiability ? "Depositar en" : "Origen de los fondos"}
                             </label>
                             <select
                                 id="source-method"
@@ -241,7 +263,7 @@ const AssetLiabilityModal: React.FC<AssetLiabilityModalProps> = ({
                             >
                                 {sources.map(source => {
                                     const numericAmount = parseFloat(amount.replace(',', '.')) || 0;
-                                    const disabled = source.balance < numericAmount;
+                                    const disabled = (isAsset || isLoan) && numericAmount > 0 && source.balance < numericAmount;
                                     return (
                                         <option key={source.id} value={source.id} disabled={disabled} style={{ color: 'initial', fontWeight: 'normal' }}>
                                             {source.name} ({formatCurrency(source.balance)}) {disabled ? " - Fondos insuficientes" : ""}

@@ -60,21 +60,24 @@ const AddValueToLoanModal: React.FC<AddValueToLoanModalProps> = ({
     if (!loan) return;
     setError('');
 
-    if (numericAmountToAdd <= 0) {
-        setError('Debes introducir un monto a añadir.');
+    if (numericAmountToAdd < 0) {
+        setError('La cantidad no puede ser negativa.');
         return;
     }
-    if (!isInitial && !sourceMethodId) {
-      setError('Debes seleccionar una cuenta de origen.');
-      return;
-    }
-    if (!isInitial) {
+    
+    // If it's not an initial movement and an amount is being transferred, validate the source.
+    if (!isInitial && numericAmountToAdd > 0) {
+        if (!sourceMethodId) {
+            setError('Debes seleccionar una cuenta de origen.');
+            return;
+        }
         const source = paymentSources.find(s => s.id === sourceMethodId);
         if (!source || source.balance < numericAmountToAdd) {
             setError('Fondos insuficientes en la cuenta de origen.');
             return;
         }
     }
+    
     if (!date) {
         setError('Debes seleccionar una fecha.');
         return;
@@ -90,6 +93,9 @@ const AddValueToLoanModal: React.FC<AddValueToLoanModalProps> = ({
       color: selectedSourceDetails.color,
       fontWeight: '600',
   } : {};
+  
+  const sourceIsInvalid = !isInitial && numericAmountToAdd > 0 && (!sourceMethodId || (paymentSources.find(s => s.id === sourceMethodId)?.balance || 0) < numericAmountToAdd);
+
 
   return (
     <div
@@ -110,93 +116,104 @@ const AddValueToLoanModal: React.FC<AddValueToLoanModalProps> = ({
           </button>
         </header>
 
-        <div className="p-4 space-y-3 overflow-y-auto">
+        <div className="p-4 space-y-4 overflow-y-auto">
+          {/* Title displayed here */}
           <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                <div className="flex items-center justify-between">
-                    <span className="font-medium text-lg">{loan.name}</span>
-                    <span className="font-mono font-semibold text-blue-500">{formatCurrency(loan.amount)}</span>
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Monto original: {formatCurrency(loan.originalAmount)}
-                </div>
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-lg">{loan.name}</span>
+              <span className="font-mono font-semibold text-blue-500">{formatCurrency(loan.amount)}</span>
             </div>
-            <AmountInput
-                value={amountToAdd}
-                onChange={setAmountToAdd}
-                label="Monto a añadir"
-                themeColor="#3b82f6"
-                currency={currency}
-                autoFocus
-            />
-             <div>
-                <label htmlFor="loan-add-details" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Detalles (Opcional)
-                </label>
-                <textarea
-                id="loan-add-details"
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="Añade una nota sobre esta ampliación..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
-                />
+            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Monto original: {formatCurrency(loan.originalAmount)}
             </div>
-             <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 pt-2">
-                <input
-                    type="checkbox"
-                    id="is-initial-add-value-checkbox"
-                    checked={isInitial}
-                    onChange={(e) => setIsInitial(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    style={{ accentColor: '#3b82f6' }}
-                />
-                <label htmlFor="is-initial-add-value-checkbox" className="cursor-pointer">
-                    Registrar como movimiento inicial (no afectará al saldo actual)
-                </label>
-            </div>
-        </div>
+          </div>
 
-        <footer className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto space-y-4">
-          {!isInitial && (
+          {/* Details */}
+          <div>
+            <label htmlFor="loan-add-details" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Detalles (Opcional)
+            </label>
+            <textarea
+              id="loan-add-details"
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="Añade una nota sobre esta ampliación..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700"
+              autoFocus
+            />
+          </div>
+
+          {/* Amount */}
+          <AmountInput
+            value={amountToAdd}
+            onChange={setAmountToAdd}
+            label="Monto a añadir"
+            themeColor="#3b82f6"
+            currency={currency}
+          />
+
+          {/* Date */}
+          <div>
+            <label htmlFor="payment-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Fecha
+            </label>
+            <CustomDatePicker
+              value={date}
+              onChange={setDate}
+              themeColor="#3b82f6"
+              displayMode="modal"
+            />
+          </div>
+
+          {/* Other settings */}
+          <div className="space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+              <input
+                type="checkbox"
+                id="is-initial-add-value-checkbox"
+                checked={isInitial}
+                onChange={(e) => setIsInitial(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                style={{ accentColor: '#3b82f6' }}
+              />
+              <label htmlFor="is-initial-add-value-checkbox" className="cursor-pointer">
+                Registrar como movimiento inicial (no afectará al saldo actual)
+              </label>
+            </div>
+            
+            {!isInitial && (
             <div className="animate-fade-in">
-                <label htmlFor="source-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="source-method" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Origen de fondos
-                </label>
-                <select
+              </label>
+              <select
                 id="source-method"
                 value={sourceMethodId}
                 onChange={(e) => setSourceMethodId(e.target.value)}
                 disabled={numericAmountToAdd <= 0}
                 className="w-full px-3 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 transition-colors disabled:opacity-50"
                 style={sourceSelectStyle}
-                >
+              >
                 <option value="" disabled>Seleccionar origen</option>
                 {paymentSources.map(source => (
-                    <option key={source.id} value={source.id} disabled={source.balance < numericAmountToAdd} style={{ color: 'initial', fontWeight: 'normal' }}>
+                  <option key={source.id} value={source.id} disabled={source.balance < numericAmountToAdd} style={{ color: 'initial', fontWeight: 'normal' }}>
                     {source.name} ({formatCurrency(source.balance)})
                     {source.balance < numericAmountToAdd ? ' - Fondos insuficientes' : ''}
-                    </option>
+                  </option>
                 ))}
-                </select>
+              </select>
             </div>
             )}
-
-          <div>
-            <label htmlFor="payment-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Fecha
-            </label>
-            <CustomDatePicker
-                value={date}
-                onChange={setDate}
-                themeColor="#3b82f6"
-            />
           </div>
-          
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+        </div>
+
+        <footer className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
+          {error && <p className="text-red-500 text-sm text-center mb-3">{error}</p>}
           
           <button
             onClick={handleSubmit}
-            disabled={numericAmountToAdd <= 0 || (!isInitial && (!sourceMethodId || (paymentSources.find(s => s.id === sourceMethodId)?.balance || 0) < numericAmountToAdd))}
+            disabled={numericAmountToAdd < 0 || sourceIsInvalid}
             className="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Añadir {formatCurrency(numericAmountToAdd)}

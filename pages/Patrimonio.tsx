@@ -59,7 +59,7 @@ const HistoryItem: React.FC<{
                 textColorClass: 'text-red-500',
                 displayName: name,
                 typeLabel: 'Deuda',
-                sign: '-'
+                sign: '+' // Money received
             };
             case 'debt-payment': return {
                 icon: <ArrowDownIcon className="w-5 h-5 text-orange-500" />,
@@ -85,10 +85,18 @@ const HistoryItem: React.FC<{
                 typeLabel: 'Ampliación Préstamo',
                 sign: '-'
             };
+            case 'debt-addition': return {
+                icon: <ArrowDownIcon className="w-5 h-5 text-red-500" />,
+                bgColorClass: 'bg-red-500/10',
+                textColorClass: 'text-red-500',
+                displayName: name,
+                typeLabel: 'Ampliación Deuda',
+                sign: '+'
+            };
         }
     }, [patrimonioType, name]);
     
-    const displayAmount = patrimonioType === 'loan' ? originalAmount : amount;
+    const displayAmount = (patrimonioType === 'loan' || patrimonioType === 'liability') ? originalAmount : amount;
 
     const subText = useMemo(() => {
         if (!isPartial) return null;
@@ -203,14 +211,14 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
             // Creations are set to the beginning of the day (00:00 UTC)
             ...assets.map(item => ({ ...item, patrimonioType: 'asset' as const, amount: item.value, sourceDetails: getSourceDetails(item.sourceMethodId), timestamp: new Date(item.date + 'T00:00:00Z').getTime() })),
             ...loans.map(item => ({ ...item, patrimonioType: 'loan' as const, amount: item.amount, sourceDetails: getSourceDetails(item.sourceMethodId), timestamp: new Date(item.date + 'T00:00:00Z').getTime() })),
-            ...liabilities.map(item => ({ ...item, patrimonioType: 'liability' as const, amount: item.amount, timestamp: new Date(item.date + 'T00:00:00Z').getTime() })),
+            ...liabilities.map(item => ({ ...item, patrimonioType: 'liability' as const, amount: item.amount, sourceDetails: getSourceDetails((item as any).destinationMethodId), timestamp: new Date(item.date + 'T00:00:00Z').getTime() })),
         ];
         
         // Payments/repayments from transactions are added with a later time (12:00 UTC)
         // to ensure they appear after creations on the same day when sorted descending.
         profile.data.transactions.forEach(t => {
             // Only consider transactions that are part of the patrimonio history
-            if (t.liabilityId || t.loanId || (t.patrimonioType === 'loan-addition' && t.patrimonioId)) {
+            if (t.liabilityId || t.loanId || (t.patrimonioType === 'loan-addition' && t.patrimonioId) || (t.patrimonioType === 'debt-addition' && t.patrimonioId)) {
                 const paymentTimestamp = new Date(t.date + 'T12:00:00Z').getTime();
 
                 if (t.liabilityId) {
@@ -237,6 +245,15 @@ const Patrimonio: React.FC<PatrimonioProps> = ({
                         timestamp: paymentTimestamp,
                         patrimonioType: 'loan-addition',
                         name: t.description,
+                    });
+                }
+                 if (t.patrimonioType === 'debt-addition') {
+                    combined.push({
+                        ...t,
+                        timestamp: paymentTimestamp,
+                        patrimonioType: 'debt-addition',
+                        name: t.description,
+                        sourceDetails: getSourceDetails(t.paymentMethodId),
                     });
                 }
             }

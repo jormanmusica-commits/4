@@ -6,7 +6,8 @@ const CustomDatePicker: React.FC<{
   onChange: (date: string) => void;
   min?: string;
   themeColor?: string;
-}> = ({ value, onChange, min, themeColor = '#008f39' }) => {
+  displayMode?: 'inline' | 'modal';
+}> = ({ value, onChange, min, themeColor = '#008f39', displayMode = 'inline' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedDate = new Date(value + 'T00:00:00Z');
   const [viewDate, setViewDate] = useState(selectedDate);
@@ -17,6 +18,8 @@ const CustomDatePicker: React.FC<{
   }, [value]);
 
   useEffect(() => {
+    if (displayMode !== 'inline') return;
+
     const handleClickOutside = (event: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -26,7 +29,7 @@ const CustomDatePicker: React.FC<{
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [pickerRef]);
+  }, [pickerRef, displayMode]);
 
   const minDateObj = min ? new Date(min + 'T00:00:00Z') : null;
 
@@ -107,6 +110,20 @@ const CustomDatePicker: React.FC<{
   const PrevMonthIcon = () => (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>);
   const NextMonthIcon = () => (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>);
 
+  const calendarContent = (
+    <>
+      <div className="flex justify-between items-center mb-4">
+        <button type="button" onClick={() => changeMonth(-1)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"><PrevMonthIcon /></button>
+        <span className="font-semibold text-gray-800 dark:text-gray-200 capitalize">{viewDate.toLocaleString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
+        <button type="button" onClick={() => changeMonth(1)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"><NextMonthIcon /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
+        <div>L</div><div>M</div><div>X</div><div>J</div><div>V</div><div>S</div><div>D</div>
+      </div>
+      <div className="grid grid-cols-7 gap-1">{renderDays()}</div>
+    </>
+  );
+
   return (
     <div ref={pickerRef} className="relative">
       <div className="relative">
@@ -122,17 +139,22 @@ const CustomDatePicker: React.FC<{
           <CalendarIcon className="w-5 h-5 text-gray-400" />
         </div>
       </div>
-      {isOpen && (
+      {isOpen && displayMode === 'inline' && (
         <div className="absolute top-full mt-2 z-10 bg-white dark:bg-gray-900 rounded-lg shadow-2xl p-4 border border-gray-200 dark:border-gray-700 w-full animate-fade-in">
-          <div className="flex justify-between items-center mb-4">
-            <button type="button" onClick={() => changeMonth(-1)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"><PrevMonthIcon /></button>
-            <span className="font-semibold text-gray-800 dark:text-gray-200 capitalize">{viewDate.toLocaleString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
-            <button type="button" onClick={() => changeMonth(1)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"><NextMonthIcon /></button>
+          {calendarContent}
+        </div>
+      )}
+      {isOpen && displayMode === 'modal' && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in"
+          onClick={() => setIsOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-900 rounded-lg shadow-2xl p-4 border border-gray-200 dark:border-gray-700 w-full max-w-xs m-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {calendarContent}
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-            <div>L</div><div>M</div><div>X</div><div>J</div><div>V</div><div>S</div><div>D</div>
-          </div>
-          <div className="grid grid-cols-7 gap-1">{renderDays()}</div>
         </div>
       )}
     </div>
